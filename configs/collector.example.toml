@@ -1,7 +1,7 @@
 [collector]
 mode = "mock"
 state_dir = "state"
-recordings_dir = "recordings"
+recordings_dir = "recordings/lerobot/bpx_v2_humanoid_raw"
 host = "127.0.0.1"
 port = 8765
 

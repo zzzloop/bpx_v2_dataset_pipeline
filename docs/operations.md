@@ -1,5 +1,8 @@
 # 操作与数据发布规范
 
+默认采集交付目录为 `recordings/lerobot/bpx_v2_humanoid_raw`。数据集冻结后，将该目录同步到训练服务器的
+`/scratch/bpx_datasets/lerobot/bpx/bpx_v2_humanoid_raw`，再进入审计、清洗、归一化和训练流程。
+
 ## 工控机采集及异常恢复
 
 1. 启动采集网页，确认后端显示为 `mock` 或预期的 ROS2 适配器。

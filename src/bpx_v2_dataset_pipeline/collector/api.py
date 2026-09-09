@@ -139,7 +139,11 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--state-dir", type=pathlib.Path, default=pathlib.Path("state"))
-    parser.add_argument("--recordings-dir", type=pathlib.Path, default=pathlib.Path("recordings"))
+    parser.add_argument(
+        "--recordings-dir",
+        type=pathlib.Path,
+        default=pathlib.Path("recordings/lerobot/bpx_v2_humanoid_raw"),
+    )
     args = parser.parse_args()
     import uvicorn
 
