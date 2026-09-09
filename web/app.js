@@ -108,6 +108,10 @@ function renderCatalog() {
   }));
   renderOptions("operator", catalog.operators);
   renderOptions("layout", catalog.layouts);
+  const translator = catalog.translator || {};
+  el("translatorInfo").textContent = translator.enabled
+    ? `${translator.model} · 无历史上下文`
+    : "本地规则 · DeepSeek 未配置";
 }
 
 async function loadCatalog() {
@@ -135,7 +139,12 @@ el("translate").onclick = async () => {
     el("taskEn").value = result.english;
     persist("taskEn");
     el("taskConfirmed").checked = false;
-    const label = result.confidence === "high" ? "标准任务精确匹配" : "本地模板翻译";
+    const labels = {
+      high: "标准任务精确匹配",
+      medium: "本地模板翻译",
+      model: "DeepSeek V4 Flash 单次翻译",
+    };
+    const label = labels[result.confidence] || "翻译完成";
     setTranslationStatus(`${label}：请核对右侧英文，确认后方可录制。`, result.confidence === "high" ? "good" : "warn");
     updateControls();
   } catch (error) {
@@ -166,6 +175,7 @@ function updateControls() {
   el("start").disabled = recording || problems.length > 0;
   el("success").disabled = !recording;
   el("failure").disabled = !recording;
+  if (!recording) setFailurePanel(false);
   el("formHint").textContent = recording
     ? "正在录制：请根据结果选择成功或失败。"
     : problems.length ? `还需完成：${problems.join("、")}` : "信息完整，可以开始新的录制。";
@@ -234,11 +244,12 @@ async function finish(status) {
   try {
     const result = await request("/api/attempts/finish", {
       status,
-      failure_reason: el("failureReason").value,
+      failure_reason: status === "failure" ? el("failureReason").value : "",
       note: el("note").value,
     });
     el("message").textContent = `attempt ${result.attempt_id} 已标记为${statusLabel(result.status)}。`;
     el("failureReason").value = "";
+    setFailurePanel(false);
     await loadCatalog();
     await refresh();
   } catch (error) {
@@ -247,7 +258,15 @@ async function finish(status) {
 }
 
 el("success").onclick = () => finish("success");
-el("failure").onclick = () => finish("failure");
+function setFailurePanel(open) {
+  el("failurePanel").hidden = !open;
+  el("failureReason").disabled = !open;
+  if (open) el("failureReason").focus();
+}
+
+el("failure").onclick = () => setFailurePanel(true);
+el("confirmFailure").onclick = () => finish("failure");
+el("cancelFailure").onclick = () => setFailurePanel(false);
 loadCatalog();
 refresh();
 setInterval(refresh, 1000);

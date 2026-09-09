@@ -52,7 +52,7 @@
             </label>
             <div class="translate-column">
               <button id="translate" class="secondary" type="button">翻译为英文 <span>→</span></button>
-              <small>本地规则，不依赖外网</small>
+              <small id="translatorInfo">正在检查翻译服务</small>
             </div>
             <label class="field">
               <span>英文训练指令 <em>VLA 标签</em></span>
@@ -114,10 +114,16 @@
           <button id="success" class="success" disabled><span class="button-icon">✓</span> 结束并标记成功</button>
           <button id="failure" class="danger" disabled><span class="button-icon">×</span> 结束并标记失败</button>
         </div>
-        <label class="field failure-reason">
-          <span>失败原因 <em>仅失败时选填</em></span>
-          <input id="failureReason" placeholder="例如：抓取滑落、遮挡、遥操中断" />
-        </label>
+        <div id="failurePanel" class="failure-panel" hidden>
+          <label class="field failure-reason">
+            <span>失败原因 <em>可选，只写入失败记录</em></span>
+            <input id="failureReason" placeholder="例如：抓取滑落、遮挡、遥操中断" disabled />
+          </label>
+          <div class="failure-actions">
+            <button id="confirmFailure" class="danger" type="button">确认失败并结束</button>
+            <button id="cancelFailure" class="ghost" type="button">返回继续录制</button>
+          </div>
+        </div>
         <p id="message" role="status"></p>
       </section>
 

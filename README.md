@@ -51,6 +51,23 @@ uv run bpx-v2-collector --mock --host 127.0.0.1 --port 8765
 打开 `http://127.0.0.1:8765`。模拟模式只验证交互与恢复逻辑，不发布机器人命令，也不生成
 正式训练数据。
 
+## 项目内 DeepSeek 翻译
+
+中文自定义任务可通过 DeepSeek V4 Flash 翻译成简洁的英文 VLA 指令。密钥只从仓库根目录的
+`.env.local` 读取，不读取或修改系统环境变量，也不会进入 Git：
+
+```bash
+cp .env.example .env.local
+# 仅在 .env.local 中填写 DEEPSEEK_API_KEY
+```
+
+每次翻译都是独立的无状态请求，只发送固定翻译约束和当前一条中文任务；不会发送历史指令、
+操作者、布局、备注或采集记录。标准预设和可确定的常见表达优先使用本地规则，不消耗 API。
+模型翻译仍必须由操作者核对英文并勾选确认后才能开始录制。
+
+“失败原因”输入框只有点击“结束并标记失败”后才会出现；再点击“确认失败并结束”才会保存。
+成功或中断记录的失败原因由前端和数据库双重强制为空。
+
 ## 尚需硬件组提供的契约
 
 正式 ROS2 adapter 开发前必须冻结：
@@ -64,4 +81,3 @@ uv run bpx-v2-collector --mock --host 127.0.0.1 --port 8765
 
 详细设计见 [architecture.md](docs/architecture.md)、[data-contract.md](docs/data-contract.md) 和
 [operations.md](docs/operations.md)。
-

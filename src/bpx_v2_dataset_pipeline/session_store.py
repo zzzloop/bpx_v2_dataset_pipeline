@@ -98,6 +98,7 @@ class SessionStore:
     ) -> None:
         if status not in {AttemptStatus.SUCCESS, AttemptStatus.FAILURE, AttemptStatus.INTERRUPTED}:
             raise ValueError(f"Invalid terminal status: {status}")
+        stored_failure_reason = failure_reason.strip() if status is AttemptStatus.FAILURE else ""
         with closing(self._connect()) as connection:
             connection.execute("BEGIN IMMEDIATE")
             cursor = connection.execute(
@@ -108,7 +109,7 @@ class SessionStore:
                 """,
                 (
                     status,
-                    failure_reason.strip(),
+                    stored_failure_reason,
                     note.strip(),
                     artifact_path,
                     _utc_now(),

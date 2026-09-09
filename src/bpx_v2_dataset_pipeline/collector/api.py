@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import dataclasses
 import pathlib
 import uuid
 
 from pydantic import BaseModel
 
-from bpx_v2_dataset_pipeline.collector.catalog import DEFAULT_LAYOUTS, DEFAULT_OPERATORS, TASK_PRESETS, translate_task
+from bpx_v2_dataset_pipeline.collector.catalog import DEFAULT_LAYOUTS, DEFAULT_OPERATORS, TASK_PRESETS
 from bpx_v2_dataset_pipeline.collector.mock_backend import MockCaptureBackend
 from bpx_v2_dataset_pipeline.collector.service import CollectorService
+from bpx_v2_dataset_pipeline.collector.translator import TaskTranslator
 from bpx_v2_dataset_pipeline.models import AttemptMetadata, AttemptStatus
 from bpx_v2_dataset_pipeline.session_store import SessionStore
 
@@ -46,7 +49,9 @@ def create_app(*, state_dir: pathlib.Path, recordings_dir: pathlib.Path, mock: b
     store = SessionStore(state_dir / "collector.sqlite3")
     store.recover_interrupted()
     service = CollectorService(store, MockCaptureBackend(), recordings_dir)
-    web_root = pathlib.Path(__file__).resolve().parents[3] / "web"
+    project_root = pathlib.Path(__file__).resolve().parents[3]
+    translator = TaskTranslator.from_project(project_root)
+    web_root = project_root / "web"
     app = FastAPI(title="BPX v2 Dataset Collector")
 
     @app.get("/")
@@ -67,12 +72,13 @@ def create_app(*, state_dir: pathlib.Path, recordings_dir: pathlib.Path, mock: b
             ],
             "operators": operators,
             "layouts": layouts,
+            "translator": dataclasses.asdict(translator.info),
         }
 
     @app.post("/api/translate")
     async def translate(request: TranslateRequest):
         try:
-            result = translate_task(request.chinese)
+            result = await asyncio.to_thread(translator.translate, request.chinese)
             return {
                 "english": result.english,
                 "source": result.source,
@@ -80,6 +86,8 @@ def create_app(*, state_dir: pathlib.Path, recordings_dir: pathlib.Path, mock: b
             }
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
+        except RuntimeError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
 
     @app.post("/api/attempts/start")
     async def start(request: StartRequest):

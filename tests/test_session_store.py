@@ -32,6 +32,17 @@ class SessionStoreTest(unittest.TestCase):
             self.assertEqual(store.recover_interrupted(), 1)
             self.assertEqual(store.get_attempt(attempt_id)["status"], AttemptStatus.INTERRUPTED)
 
+    def test_failure_reason_is_stored_only_for_failed_attempts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SessionStore(pathlib.Path(directory) / "collector.sqlite3")
+            successful = store.begin_attempt(metadata())
+            store.finish_attempt(successful, AttemptStatus.SUCCESS, failure_reason="must not persist")
+            self.assertEqual(store.get_attempt(successful)["failure_reason"], "")
+
+            failed = store.begin_attempt(metadata())
+            store.finish_attempt(failed, AttemptStatus.FAILURE, failure_reason="grasp slipped")
+            self.assertEqual(store.get_attempt(failed)["failure_reason"], "grasp slipped")
+
 
 if __name__ == "__main__":
     unittest.main()
