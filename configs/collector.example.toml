@@ -1,0 +1,19 @@
+[collector]
+mode = "mock"
+state_dir = "state"
+recordings_dir = "recordings"
+host = "127.0.0.1"
+port = 8765
+
+[capture]
+fps = 30
+sync_tolerance_ms = 15
+max_sensor_age_ms = 100
+
+# Hardware-specific values deliberately remain unset until the ROS2 contract is frozen.
+[ros2]
+node_name = "bpx_v2_dataset_collector"
+camera_topics = []
+state_topic = ""
+action_topic = ""
+

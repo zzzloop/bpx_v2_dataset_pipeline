@@ -1,0 +1,10 @@
+{
+  "observation.state": {
+    "jump_thresholds": [],
+    "neighbor_thresholds": []
+  },
+  "action": {
+    "jump_thresholds": [],
+    "neighbor_thresholds": []
+  }
+}

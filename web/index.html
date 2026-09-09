@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BPX v2 Dataset Collector</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">ROS2 JAZZY · DATA ONLY</p>
+        <h1>BPX v2 数据采集控制台</h1>
+        <p>当前框架不会发布机器人命令。正式录制必须等待 ROS2 数据契约冻结。</p>
+      </header>
+      <section class="status"><strong id="mode">LOADING</strong><span id="backend"></span><span id="counter"></span></section>
+      <section class="panel">
+        <label>英文任务指令<textarea id="taskEn" placeholder="Pick up the red block and place it in the bucket."></textarea></label>
+        <label>中文说明（可选）<input id="taskZh" /></label>
+        <div class="grid">
+          <label>操作者编号<input id="operator" placeholder="operator_01" /></label>
+          <label>场景布局编号<input id="layout" placeholder="layout_001" /></label>
+          <label>末端类型<select id="embodiment"><option value="gripper">夹爪</option><option value="dexterous_hand">因时灵巧手</option></select></label>
+        </div>
+        <label>备注（可选）<input id="note" /></label>
+        <div class="buttons">
+          <button id="start">开始新 attempt</button>
+          <button id="success" disabled>结束：成功</button>
+          <button id="failure" class="danger" disabled>结束：失败</button>
+        </div>
+        <label>失败原因（可选）<input id="failureReason" /></label>
+        <p id="message"></p>
+      </section>
+      <section class="panel"><h2>最近 attempts</h2><table><thead><tr><th>ID</th><th>状态</th><th>任务</th><th>操作者</th><th>布局</th><th>末端</th></tr></thead><tbody id="attempts"></tbody></table></section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+
