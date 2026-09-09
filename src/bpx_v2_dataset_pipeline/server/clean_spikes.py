@@ -37,7 +37,6 @@ def _clean_parquet(arguments: tuple[pathlib.Path, dict[str, dict[str, np.ndarray
         raise RuntimeError("Install the server extra: uv sync --extra server") from error
     table = pq.read_table(path)
     counts = {}
-    repairs = []
     output = table
     for key, config in thresholds.items():
         column_index = output.schema.get_field_index(key)
@@ -50,20 +49,6 @@ def _clean_parquet(arguments: tuple[pathlib.Path, dict[str, dict[str, np.ndarray
             neighbor_thresholds=config["neighbor"],
         )
         counts[key] = result.count
-        for frame_index, dimension in np.argwhere(result.mask):
-            frame = int(frame_index)
-            axis = int(dimension)
-            repairs.append(
-                {
-                    "feature": key,
-                    "frame_index": frame,
-                    "dimension": axis,
-                    "previous": float(values[frame - 1, axis]),
-                    "original": float(values[frame, axis]),
-                    "following": float(values[frame + 1, axis]),
-                    "repaired": float(result.repaired[frame, axis]),
-                }
-            )
         if apply and result.count:
             field = output.schema.field(column_index)
             output = output.set_column(column_index, field, pa.array(result.repaired.tolist(), type=field.type))
@@ -75,7 +60,7 @@ def _clean_parquet(arguments: tuple[pathlib.Path, dict[str, dict[str, np.ndarray
             os.replace(temporary_path, path)
         finally:
             temporary_path.unlink(missing_ok=True)
-    return {"path": str(path), "counts": counts, "total": sum(counts.values()), "repairs": repairs}
+    return {"path": str(path), "counts": counts, "total": sum(counts.values())}
 
 
 def _copy_as_hardlinked_version(source: pathlib.Path, output: pathlib.Path) -> None:
@@ -113,14 +98,9 @@ def main() -> None:
         _copy_as_hardlinked_version(source, target)
     thresholds = _load_thresholds(args.thresholds)
     parquet_files = sorted((target / "data").rglob("*.parquet"))
-    if not parquet_files:
-        raise ValueError(f"数据集没有 Parquet episode: {target}")
     jobs = [(path, thresholds, args.apply) for path in parquet_files]
     with futures.ProcessPoolExecutor(max_workers=args.workers) as executor:
-        results = []
-        for index, result in enumerate(executor.map(_clean_parquet, jobs), start=1):
-            results.append(result)
-            print(f"SCANNED {index}/{len(jobs)}", flush=True)
+        results = list(executor.map(_clean_parquet, jobs))
     report = {
         "source": str(source),
         "output": str(target) if args.apply else None,

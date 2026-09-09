@@ -8,15 +8,13 @@ dependencies = ["numpy>=1.26,<3"]
 
 [project.optional-dependencies]
 collector = ["fastapi>=0.115", "uvicorn>=0.34"]
-server = ["av>=14", "fastapi>=0.115", "h5py>=3.13", "pyarrow>=20", "tyro>=0.9", "uvicorn>=0.34"]
-dev = ["httpx2>=0.1", "pytest>=8.3", "ruff>=0.11"]
+server = ["av>=14", "h5py>=3.13", "pyarrow>=20", "tyro>=0.9"]
+dev = ["pytest>=8.3", "ruff>=0.11"]
 
 [project.scripts]
 bpx-v2-collector = "bpx_v2_dataset_pipeline.collector.api:main"
 bpx-v2-audit = "bpx_v2_dataset_pipeline.server.audit:main"
 bpx-v2-clean-spikes = "bpx_v2_dataset_pipeline.server.clean_spikes:main"
-bpx-v2-export-hdf5 = "bpx_v2_dataset_pipeline.server.hdf5_exporter:main"
-bpx-v2-server = "bpx_v2_dataset_pipeline.server.api:main"
 
 [build-system]
 requires = ["hatchling"]
