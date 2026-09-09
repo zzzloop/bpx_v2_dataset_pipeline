@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BPX Research Data Studio</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%232457e6'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='42' fill='white'%3Eβ%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-mark">β</div>
+      <div class="brand-copy">
+        <p>BPX ROBOTICS · DATA SYSTEMS</p>
+        <h1>Research Data Studio</h1>
+      </div>
+      <div class="top-actions">
+        <span id="connection" class="status-pill neutral"><i></i>正在连接</span>
+        <span id="clock" class="clock">--:--:--</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero-grid">
+        <article class="hero-card">
+          <div>
+            <span class="kicker">DATA → POLICY</span>
+            <h2>从权威数据到可复现实验</h2>
+            <p>审计、毛刺清洗、归一化与 OpenPI 训练统一编排。所有任务保留命令、日志、进度和指标。</p>
+          </div>
+          <div class="pipeline" aria-label="pipeline">
+            <span>01 入库审计</span><b>→</b><span>02 清洗复审</span><b>→</b><span>03 归一化</span><b>→</b><span>04 训练</span>
+          </div>
+        </article>
+        <article class="system-card">
+          <div class="card-head"><div><span class="eyebrow">COMPUTE</span><h3>服务器状态</h3></div><button id="refreshSystem" class="icon-button" title="刷新">↻</button></div>
+          <div id="gpuGrid" class="gpu-grid"><p class="muted">等待 GPU 信息…</p></div>
+          <div class="disk-row"><span>目标磁盘</span><strong id="diskUsage">—</strong></div>
+          <div class="meter"><i id="diskMeter"></i></div>
+        </article>
+      </section>
+
+      <section class="settings-card">
+        <div class="section-title"><div><span class="index">00</span><h2>运行环境</h2></div><p>路径只保存在当前浏览器，不进入 Git。</p></div>
+        <div class="form-grid cols-3">
+          <label><span>OpenPI 根目录</span><input id="openpiRoot" placeholder="~/openpi-bpx-pi05-finetune" /></label>
+          <label><span>LeRobot 数据根目录</span><input id="hfLerobotHome" placeholder="/scratch/bpx_datasets/lerobot" /></label>
+          <label><span>Checkpoint 根目录</span><input id="checkpointRoot" placeholder="/scratch/bpx_datasets/checkpoints" /></label>
+          <label><span>Hugging Face 缓存</span><input id="hfHome" placeholder="/scratch/bpx_datasets/cache/huggingface" /></label>
+          <label><span>Datasets 缓存</span><input id="hfDatasetsCache" placeholder="/scratch/bpx_datasets/cache/huggingface/datasets" /></label>
+          <label><span>临时目录</span><input id="tmpdir" placeholder="/scratch/bpx_datasets/tmp" /></label>
+          <label><span>uv 缓存</span><input id="uvCacheDir" placeholder="/scratch/bpx_datasets/cache/uv" /></label>
+        </div>
+      </section>
+
+      <nav class="tabs" aria-label="operation stages">
+        <button class="active" data-tab="audit"><span>01</span>审计</button>
+        <button data-tab="spikes"><span>02</span>毛刺清洗</button>
+        <button data-tab="normalize"><span>03</span>归一化</button>
+        <button data-tab="export"><span>04</span>格式导出</button>
+        <button data-tab="train"><span>05</span>训练</button>
+      </nav>
+
+      <section class="operation-card tab-panel active" data-panel="audit">
+        <div class="section-title"><div><span class="index">01</span><h2>LeRobot 数据集审计</h2></div><p>结构、帧索引、时间戳、维度、有限值与视频文件数量。</p></div>
+        <div class="form-grid cols-3">
+          <label class="wide"><span>数据集目录</span><input id="auditDataset" placeholder="/scratch/.../bpx_v2_gripper_v001" /></label>
+          <label><span>并行进程</span><input id="auditWorkers" type="number" min="1" max="256" value="32" /></label>
+          <label><span>视频检查</span><select id="auditVideoCheck"><option value="headers">逐视频容器/尺寸/FPS</option><option value="full">全帧解码与计数</option><option value="none">仅核对文件路径</option></select></label>
+          <label class="wide"><span>审计报告 JSON</span><input id="auditReport" placeholder="/scratch/.../reports/audit-v001.json" /></label>
+        </div>
+        <div class="action-row"><button id="startAudit" class="primary">开始数据审计</button><span>只读操作；全帧模式最严格，也会读取所有 MP4。</span></div>
+      </section>
+
+      <section class="operation-card tab-panel" data-panel="spikes">
+        <div class="section-title"><div><span class="index">02</span><h2>数值毛刺扫描与清洗</h2></div><p>先扫描报告；确认阈值后才生成独立清洗版本。</p></div>
+        <div class="form-grid cols-3">
+          <label class="wide"><span>权威源数据集</span><input id="spikeSource" placeholder="/scratch/.../bpx_v2_gripper_v001" /></label>
+          <label><span>并行进程</span><input id="spikeWorkers" type="number" min="1" max="256" value="32" /></label>
+          <label><span>逐维阈值 JSON</span><input id="thresholdsPath" placeholder="configs/gripper-spike-thresholds.json" /></label>
+          <label><span>报告 JSON</span><input id="spikeReport" placeholder="/scratch/.../reports/spikes-v001.json" /></label>
+          <label class="wide"><span>清洗输出目录</span><input id="cleanOutput" placeholder="/scratch/.../bpx_v2_gripper_v001_clean" /></label>
+        </div>
+        <div class="action-row"><button id="scanSpikes" class="secondary">仅扫描毛刺</button><button id="cleanSpikes" class="primary">生成清洗版本并复审</button></div>
+      </section>
+
+      <section class="operation-card tab-panel" data-panel="normalize">
+        <div class="section-title"><div><span class="index">03</span><h2>OpenPI 归一化统计</h2></div><p>默认 32 workers，处理全部帧，不使用 max-frames。</p></div>
+        <div class="form-grid cols-3">
+          <label class="wide"><span>OpenPI config name</span><input id="normConfig" placeholder="pi05_bpx_v2_gripper_full" /></label>
+          <label><span>DataLoader workers</span><input id="normWorkers" type="number" min="1" max="256" value="32" /></label>
+        </div>
+        <div class="research-note"><b>质量约束</b><span>增加 workers 只并行数据读取，不改变样本、变换或统计方法，因此不会降低归一化质量。</span></div>
+        <div class="action-row"><button id="startNormalize" class="primary">计算归一化统计</button></div>
+      </section>
+
+      <section class="operation-card tab-panel" data-panel="export">
+        <div class="section-title"><div><span class="index">04</span><h2>派生格式导出</h2></div><p>LeRobot 始终是权威源；导出文件写入独立目录。</p></div>
+        <div class="form-grid cols-4">
+          <label class="wide"><span>LeRobot 源目录</span><input id="exportSource" placeholder="/scratch/.../bpx_v2_gripper_v001_clean" /></label>
+          <label class="wide"><span>HDF5 输出目录</span><input id="exportOutput" placeholder="/scratch/.../exports/gripper_v001_hdf5" /></label>
+          <label><span>并行 episodes</span><input id="exportWorkers" type="number" min="1" max="64" value="4" /></label>
+          <label><span>压缩算法</span><select id="exportCompression"><option value="gzip">gzip</option><option value="lzf">lzf</option><option value="none">不压缩</option></select></label>
+          <label><span>gzip level</span><input id="compressionLevel" type="number" min="0" max="9" value="4" /></label>
+        </div>
+        <div class="research-note"><b>只读边界</b><span>导出器逐帧解码 MP4 并写出 episode HDF5，不修改 LeRobot 数据；输出附带 SHA-256 manifest。</span></div>
+        <div class="action-row"><button id="startExport" class="primary">导出 HDF5</button></div>
+      </section>
+
+      <section class="operation-card tab-panel" data-panel="train">
+        <div class="section-title"><div><span class="index">05</span><h2>OpenPI 训练实验</h2></div><p>关键参数显式固定，续训时保持一致并选择 resume。</p></div>
+        <div class="form-grid cols-4">
+          <label class="wide"><span>Config name</span><input id="trainConfig" placeholder="pi05_bpx_v2_gripper_full" /></label>
+          <label class="wide"><span>Experiment name</span><input id="expName" placeholder="bpx_v2_gripper_full_bs2" /></label>
+          <label><span>CUDA 设备</span><input id="cudaDevices" value="2,3" /></label>
+          <label><span>XLA 显存比例</span><input id="memoryFraction" type="number" min="0.1" max="1" step="0.01" value="0.96" /></label>
+          <label><span>Global batch</span><input id="batchSize" type="number" min="1" value="2" /></label>
+          <label><span>FSDP devices</span><input id="fsdpDevices" type="number" min="1" value="2" /></label>
+          <label><span>训练 steps</span><input id="trainSteps" type="number" min="1" value="200000" /></label>
+          <label><span>保存间隔</span><input id="saveInterval" type="number" min="1" value="5000" /></label>
+          <label><span>长期保留间隔</span><input id="keepPeriod" type="number" min="1" value="25000" /></label>
+          <label><span>启动模式</span><select id="trainMode"><option value="overwrite">新实验 / overwrite</option><option value="resume">断点续训 / resume</option></select></label>
+        </div>
+        <div class="action-row"><button id="startTrain" class="primary">启动训练</button><span>同一时间只允许一个重任务运行。</span></div>
+      </section>
+
+      <section class="monitor-grid">
+        <article class="jobs-card">
+          <div class="section-title compact"><div><span class="index">06</span><h2>任务记录</h2></div><button id="refreshJobs" class="icon-button">↻</button></div>
+          <div id="jobList" class="job-list"><p class="muted">暂无任务</p></div>
+        </article>
+        <article class="detail-card">
+          <div class="detail-head">
+            <div><span id="selectedKind" class="eyebrow">NO JOB SELECTED</span><h2 id="selectedTitle">选择任务查看详情</h2></div>
+            <button id="cancelJob" class="danger-outline" hidden>终止任务</button>
+          </div>
+          <div class="progress-head"><span id="progressText">0 / 0</span><b id="progressPercent">0%</b></div>
+          <div class="progress-track"><i id="progressBar"></i></div>
+          <div class="metric-strip">
+            <div><span>LOSS</span><strong id="metricLoss">—</strong></div>
+            <div><span>GRAD NORM</span><strong id="metricGrad">—</strong></div>
+            <div><span>LEARNING RATE</span><strong id="metricLr">—</strong></div>
+            <div><span>STATUS</span><strong id="metricStatus">—</strong></div>
+          </div>
+          <div class="charts">
+            <div><h3>Flow-matching loss</h3><svg id="lossChart" viewBox="0 0 620 180" role="img"></svg></div>
+            <div><h3>Gradient / update norm</h3><svg id="normChart" viewBox="0 0 620 180" role="img"></svg></div>
+          </div>
+          <details class="command-box"><summary>本次受控命令</summary><code id="commandText">—</code></details>
+          <pre id="jobLog" class="log-view">任务日志将在这里显示。</pre>
+        </article>
+      </section>
+      <p id="toast" class="toast" role="status"></p>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

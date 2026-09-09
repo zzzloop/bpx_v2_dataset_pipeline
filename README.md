@@ -51,6 +51,24 @@ uv run bpx-v2-collector --mock --host 127.0.0.1 --port 8765
 打开 `http://127.0.0.1:8765`。模拟模式只验证交互与恢复逻辑，不发布机器人命令，也不生成
 正式训练数据。
 
+## 服务器数据工程与训练中心
+
+服务器端提供独立的明亮科研风仪表盘，统一执行 LeRobot 审计、毛刺扫描/清洗、全量归一化、
+HDF5 派生导出和 OpenPI 训练，并显示 GPU、磁盘、日志、进度及训练指标曲线：
+
+```bash
+uv sync --extra server --extra dev
+uv run bpx-v2-server \
+  --host 127.0.0.1 \
+  --port 8866 \
+  --state-dir state \
+  --openpi-root ../openpi-bpx-pi05-finetune
+```
+
+使用启动日志中带 `token` 的地址访问。归一化默认使用 32 个 DataLoader workers，并处理全部
+帧；训练表单显式固定 CUDA/FSDP、batch、steps、checkpoint 和续训模式。详细说明见
+[server-dashboard.md](docs/server-dashboard.md)。
+
 ## 项目内 DeepSeek 翻译
 
 中文自定义任务可通过 DeepSeek V4 Flash 翻译成简洁的英文 VLA 指令。密钥只从仓库根目录的
@@ -81,5 +99,5 @@ attempt 编号，不作为成功训练 episode 使用。
 5. URDF/SRDF 与标定文件版本（用于名字、范围和未来 FK/仿真验证）；
 6. 是否保留可选的 ROS2 MCAP 影子记录作为原始证据。
 
-详细设计见 [architecture.md](docs/architecture.md)、[data-contract.md](docs/data-contract.md) 和
-[operations.md](docs/operations.md)。
+详细设计见 [architecture.md](docs/architecture.md)、[data-contract.md](docs/data-contract.md)、
+[operations.md](docs/operations.md) 和 [server-dashboard.md](docs/server-dashboard.md)。
