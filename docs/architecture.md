@@ -25,6 +25,10 @@ and synchronization policy. The mock implementation exercises the same service A
 details are ready, `Ros2JazzyBackend` will be added without changing the UI, attempt database, server tools, or
 training integration.
 
+`DatasetExporter` is the corresponding server-side boundary. LeRobot is the only canonical format. Optional
+HDF5 or future exporters receive an immutable source path and must write into a different derived-output path.
+Concrete exporters are deliberately deferred until the joint/action schema is frozen.
+
 ## Crash model
 
 The SQLite registry uses WAL mode and full synchronization. Starting an attempt commits its ID before frame
@@ -33,4 +37,3 @@ capture starts. A clean finish transitions it to `success` or `failure`. On appl
 
 Formal data publication will use a staging directory and an atomic rename on the same filesystem. Partially
 written shards never appear in the canonical dataset index.
-
