@@ -3,37 +3,137 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>BPX v2 Dataset Collector</title>
+    <title>BPX v2 数据采集控制台</title>
     <link rel="stylesheet" href="/static/app.css" />
   </head>
   <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
     <main>
-      <header>
-        <p class="eyebrow">ROS2 JAZZY · DATA ONLY</p>
-        <h1>BPX v2 数据采集控制台</h1>
-        <p>当前框架不会发布机器人命令。正式录制必须等待 ROS2 数据契约冻结。</p>
+      <header class="hero">
+        <div>
+          <p class="eyebrow">BPX V2 · ROS2 JAZZY · DATA ONLY</p>
+          <h1>数据采集控制台</h1>
+          <p class="subtitle">统一任务语言、采集身份与场景版本，让每一条示教都有可追溯的上下文。</p>
+        </div>
+        <div class="safety-card">
+          <span class="safety-icon">◇</span>
+          <div><strong>仅采集数据</strong><small>本服务不会发布机器人运动指令</small></div>
+        </div>
       </header>
-      <section class="status"><strong id="mode">LOADING</strong><span id="backend"></span><span id="counter"></span></section>
-      <section class="panel">
-        <label>英文任务指令<textarea id="taskEn" placeholder="Pick up the red block and place it in the bucket."></textarea></label>
-        <label>中文说明（可选）<input id="taskZh" /></label>
-        <div class="grid">
-          <label>操作者编号<input id="operator" placeholder="operator_01" /></label>
-          <label>场景布局编号<input id="layout" placeholder="layout_001" /></label>
-          <label>末端类型<select id="embodiment"><option value="gripper">夹爪</option><option value="dexterous_hand">因时灵巧手</option></select></label>
-        </div>
-        <label>备注（可选）<input id="note" /></label>
-        <div class="buttons">
-          <button id="start">开始新 attempt</button>
-          <button id="success" disabled>结束：成功</button>
-          <button id="failure" class="danger" disabled>结束：失败</button>
-        </div>
-        <label>失败原因（可选）<input id="failureReason" /></label>
-        <p id="message"></p>
+
+      <section class="status-strip" aria-live="polite">
+        <div class="status-primary"><i id="modeDot"></i><strong id="mode">正在连接</strong></div>
+        <div class="metric"><span>采集后端</span><b id="backend">—</b></div>
+        <div class="metric"><span>当前编号</span><b id="attemptNumber">—</b></div>
+        <div class="metric"><span>已接收帧</span><b id="frameCount">0</b></div>
+        <div class="metric"><span>本次会话</span><b id="sessionShort">—</b></div>
       </section>
-      <section class="panel"><h2>最近 attempts</h2><table><thead><tr><th>ID</th><th>状态</th><th>任务</th><th>操作者</th><th>布局</th><th>末端</th></tr></thead><tbody id="attempts"></tbody></table></section>
+
+      <section class="workspace">
+        <article class="panel task-panel">
+          <div class="section-title">
+            <div><span class="step">01</span><h2>任务语言</h2></div>
+            <p>优先选择标准任务；自定义任务可先输入中文，再生成英文。</p>
+          </div>
+
+          <label class="field">
+            <span>常见任务指令</span>
+            <select id="taskPreset">
+              <option value="">请选择预设，或在下方自定义</option>
+            </select>
+          </label>
+          <div id="presetGrid" class="preset-grid"></div>
+
+          <div class="translation-grid">
+            <label class="field">
+              <span>中文任务描述 <em>输入端</em></span>
+              <textarea id="taskZh" placeholder="例如：抓取红色方块并放入桶中。"></textarea>
+            </label>
+            <div class="translate-column">
+              <button id="translate" class="secondary" type="button">翻译为英文 <span>→</span></button>
+              <small>本地规则，不依赖外网</small>
+            </div>
+            <label class="field">
+              <span>英文训练指令 <em>VLA 标签</em></span>
+              <textarea id="taskEn" placeholder="Pick up the red block and place it in the bucket."></textarea>
+            </label>
+          </div>
+
+          <div id="translationStatus" class="translation-status neutral">
+            英文指令将作为正式训练标签，请确认语义与本次示教完全一致。
+          </div>
+          <label class="confirm-row">
+            <input id="taskConfirmed" type="checkbox" />
+            <span>我已确认英文指令准确描述本次示教</span>
+          </label>
+        </article>
+
+        <article class="panel metadata-panel">
+          <div class="section-title">
+            <div><span class="step">02</span><h2>采集元数据</h2></div>
+            <p>可以从历史值中选择，也可以直接输入新编号。</p>
+          </div>
+          <div class="metadata-grid">
+            <label class="field">
+              <span>操作者编号</span>
+              <input id="operator" list="operatorOptions" placeholder="operator_01" autocomplete="off" />
+              <datalist id="operatorOptions"></datalist>
+            </label>
+            <label class="field">
+              <span>场景布局编号</span>
+              <input id="layout" list="layoutOptions" placeholder="layout_random_easy_01" autocomplete="off" />
+              <datalist id="layoutOptions"></datalist>
+            </label>
+            <label class="field">
+              <span>末端执行器</span>
+              <select id="embodiment">
+                <option value="gripper">夹爪 · bpx_v2_gripper</option>
+                <option value="dexterous_hand">因时灵巧手 · bpx_v2_dexhand</option>
+              </select>
+            </label>
+          </div>
+          <label class="field">
+            <span>采集备注 <em>可选</em></span>
+            <input id="note" placeholder="道具、光照、异常或本轮采集说明" />
+          </label>
+          <div class="contract-note">
+            <span>记录契约</span>
+            <p>失败重录不会覆盖旧编号；每次点击开始都会分配新的 <code>attempt_id</code>。</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel control-panel">
+        <div class="section-title compact">
+          <div><span class="step">03</span><h2>录制控制</h2></div>
+          <p id="formHint">请先完成任务和元数据。</p>
+        </div>
+        <div class="control-row">
+          <button id="start" class="primary" disabled><span class="button-icon">●</span> 开始新 attempt</button>
+          <button id="success" class="success" disabled><span class="button-icon">✓</span> 结束并标记成功</button>
+          <button id="failure" class="danger" disabled><span class="button-icon">×</span> 结束并标记失败</button>
+        </div>
+        <label class="field failure-reason">
+          <span>失败原因 <em>仅失败时选填</em></span>
+          <input id="failureReason" placeholder="例如：抓取滑落、遮挡、遥操中断" />
+        </label>
+        <p id="message" role="status"></p>
+      </section>
+
+      <section class="panel history-panel">
+        <div class="section-title compact">
+          <div><span class="step">04</span><h2>最近采集记录</h2></div>
+          <p>正式数据发布前仍需经过服务器审计。</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>状态</th><th>英文任务</th><th>操作者</th><th>布局</th><th>末端</th></tr></thead>
+            <tbody id="attempts"></tbody>
+          </table>
+        </div>
+      </section>
     </main>
     <script src="/static/app.js"></script>
   </body>
 </html>
-

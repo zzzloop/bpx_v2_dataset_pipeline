@@ -6,6 +6,7 @@ import uuid
 
 from pydantic import BaseModel
 
+from bpx_v2_dataset_pipeline.collector.catalog import DEFAULT_LAYOUTS, DEFAULT_OPERATORS, TASK_PRESETS, translate_task
 from bpx_v2_dataset_pipeline.collector.mock_backend import MockCaptureBackend
 from bpx_v2_dataset_pipeline.collector.service import CollectorService
 from bpx_v2_dataset_pipeline.models import AttemptMetadata, AttemptStatus
@@ -26,6 +27,10 @@ class FinishRequest(BaseModel):
     status: str
     failure_reason: str = ""
     note: str = ""
+
+
+class TranslateRequest(BaseModel):
+    chinese: str
 
 
 def create_app(*, state_dir: pathlib.Path, recordings_dir: pathlib.Path, mock: bool):
@@ -51,6 +56,30 @@ def create_app(*, state_dir: pathlib.Path, recordings_dir: pathlib.Path, mock: b
     @app.get("/api/status")
     async def status():
         return service.status()
+
+    @app.get("/api/catalog")
+    async def catalog():
+        operators = list(dict.fromkeys([*store.distinct_values("operator_id"), *DEFAULT_OPERATORS]))
+        layouts = list(dict.fromkeys([*store.distinct_values("layout_id"), *DEFAULT_LAYOUTS]))
+        return {
+            "tasks": [
+                {"id": item.id, "category": item.category, "zh": item.zh, "en": item.en} for item in TASK_PRESETS
+            ],
+            "operators": operators,
+            "layouts": layouts,
+        }
+
+    @app.post("/api/translate")
+    async def translate(request: TranslateRequest):
+        try:
+            result = translate_task(request.chinese)
+            return {
+                "english": result.english,
+                "source": result.source,
+                "confidence": result.confidence,
+            }
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
 
     @app.post("/api/attempts/start")
     async def start(request: StartRequest):

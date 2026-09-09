@@ -137,3 +137,23 @@ class SessionStore:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def distinct_values(self, column: str, limit: int = 50) -> list[str]:
+        """Return recent non-empty values for a whitelisted UI option column."""
+        if column not in {"operator_id", "layout_id"}:
+            raise ValueError(f"Unsupported option column: {column}")
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT {column}, MAX(attempt_id) AS latest
+                FROM attempts
+                WHERE {column} != ''
+                GROUP BY {column}
+                ORDER BY latest DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [str(row[column]) for row in rows]
