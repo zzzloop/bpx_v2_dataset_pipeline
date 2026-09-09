@@ -1,34 +1,49 @@
-# Operations
+# 操作与数据发布规范
 
-## Collector recovery
+## 工控机采集及异常恢复
 
-1. Start the web console and verify it reports `mock` or the expected ROS2 adapter.
-2. Select end effector, enter English task, operator ID and layout ID.
-3. Start an attempt; the ID is allocated immediately.
-4. Stop and label success/failure. Notes and failure reason are optional.
-5. After a process or power interruption, restart the service. Previous `recording` attempts are automatically
-   marked `interrupted`; the next attempt receives a new ID.
+1. 启动采集网页，确认后端显示为 `mock` 或预期的 ROS2 适配器。
+2. 选择末端类型，填写英文任务、操作者编号和布局编号。
+3. 点击开始录制；此时系统立即分配并持久化 `attempt_id`。
+4. 结束录制后人工标注成功或失败；备注和失败原因为可选项。
+5. 如果程序崩溃或工控机断电，重启服务。此前残留的 `recording` 会自动标记为
+   `interrupted`，下一次采集使用全新的编号。
 
-## Server publication gates
+模拟后端仅用于测试网页、编号、状态机和恢复流程，不发布机器人指令，也不生成可用于训练的
+正式数据。
 
-Before a dataset version may train a model, record and verify:
+## 服务器入库和发布门禁
 
-- schema version and robot type;
-- episode/task/operator/layout distributions;
-- exact frame, video and episode counts;
-- timestamp monotonicity, synchronization skew and missing frames;
-- finite state/action values, ranges and joint ordering;
-- video decode samples and RGB contract;
-- spike report and every repaired coordinate;
-- input/output hashes and immutable manifest;
-- held-out evaluation split defined before training.
+数据版本进入训练前，必须记录并检查：
 
-Cleaning never mutates the only copy. Write a new version, validate it, then atomically publish it.
+- schema 版本和 `robot_type`；
+- episode、任务、操作者和布局的数量及分布；
+- 精确的帧数、视频数和 episode 数；
+- 时间戳单调性、同步偏差、缺帧和丢帧；
+- state/action 是否有限、数值范围以及关节顺序；
+- MP4 解码抽检和 RGB 数据契约；
+- 毛刺扫描报告及每一个被修复的坐标；
+- 输入、输出文件哈希和不可变 manifest；
+- 在训练开始前固定的独立验证集和测试集。
 
-## Online augmentation
+清洗程序绝不能修改唯一的数据副本。应当写出一个新版本，完成审计后，再通过原子操作发布。
 
-Use photometric augmentation only on the training split. One sampled transform is shared by all camera views and
-temporal frames in a training item. Default policy changes brightness, contrast and gamma without hue rotation,
-horizontal flip, arbitrary crop or geometric warp. This preserves left/right camera meaning and color-conditioned
-language. Keep an augmentation-off run for ablation.
+## 并行清洗
 
+审计和数值毛刺清洗以 episode/Parquet 文件为任务单位，通过多进程使用服务器 CPU。工作进程
+数量应根据物理核心数和磁盘吞吐确定；64 核机器可以从 32 个 worker 开始测试。继续增加
+worker 只有在 CPU 尚未占满且磁盘没有成为瓶颈时才有意义。
+
+毛刺清洗默认仅输出报告。只有显式指定 `--apply` 和新的 `--output-root` 时才写出清洗版，
+而且必须在新版本上再次运行完整审计。
+
+## 在线图像增强
+
+图像增强只对训练集生效，验证集和测试集绝不增强。一次采样得到的亮度、对比度和 gamma
+参数应同时应用于一个训练样本内的全部相机和时间帧，避免制造不真实的跨相机光照差异。
+
+默认不使用色相旋转、颜色替换、水平翻转、随意裁剪或几何扭曲，从而保持左右相机语义、
+空间关系和颜色语言指令不变。论文实验应保留一组关闭增强的对照训练。
+
+在线增强不会凭空增加任务覆盖度，也不会改变 epoch 的计算方式；它只会让模型每次读取同一
+训练样本时看到不同但语义一致的光照版本。

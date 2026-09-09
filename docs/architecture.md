@@ -1,39 +1,48 @@
-# Architecture
+# 系统架构
 
-## Two runtime environments
+## 两套运行环境
 
-### Industrial computer
+### 机器人工控机
 
-- Ubuntu with ROS2 Jazzy.
-- Subscribes only; the collector never sends motor commands.
-- Web UI controls metadata and recording lifecycle.
-- Each recording attempt is isolated and recoverable.
-- A hardware-independent `CaptureBackend` feeds synchronized frames to the writer.
+- 操作系统为 Ubuntu，使用 ROS2 Jazzy。
+- 采集程序只订阅传感器和状态数据，绝不向机器人发送运动指令。
+- 网页界面负责填写元数据并控制每次录制的开始和结束。
+- 每次录制尝试（attempt）相互隔离，并且能够从异常中恢复。
+- 与硬件无关的 `CaptureBackend` 接口负责向数据写入器提供已经同步的帧。
 
-### Server
+### 训练服务器
 
-- Treats accepted LeRobot shards as immutable inputs.
-- Audits before merging.
-- Produces versioned cleaned datasets instead of editing canonical input in place.
-- Uses process-level parallelism per episode for CPU-bound audit/clean/export work.
-- OpenPI consumes one fixed dataset version and its matching normalization statistics.
+- 已验收的 LeRobot 数据分片视为不可变输入。
+- 所有数据必须先审计，再合并或发布。
+- 清洗时生成有明确版本的新数据集，不在原始权威数据上原地修改。
+- 对以 episode 为单位的审计、清洗和导出任务使用多进程并行。
+- OpenPI 每次训练只能绑定一个固定的数据集版本及与之对应的归一化统计。
 
-## Plugin boundary
+## 可插拔边界
 
-`CaptureBackend` is the only component allowed to know ROS2 topic names, message types, QoS, image encoding,
-and synchronization policy. The mock implementation exercises the same service API without ROS. When hardware
-details are ready, `Ros2JazzyBackend` will be added without changing the UI, attempt database, server tools, or
-training integration.
+`CaptureBackend` 是唯一允许了解 ROS2 topic、消息类型、QoS、图像编码和同步策略的组件。
+模拟后端无需 ROS2 即可验证同一套服务接口。硬件协议确定后，可以增加
+`Ros2JazzyBackend`，而无需修改网页、attempt 数据库、服务器工具或训练集成代码。
 
-`DatasetExporter` is the corresponding server-side boundary. LeRobot is the only canonical format. Optional
-HDF5 or future exporters receive an immutable source path and must write into a different derived-output path.
-Concrete exporters are deliberately deferred until the joint/action schema is frozen.
+服务器侧采用对应的 `DatasetExporter` 接口。LeRobot 是唯一的权威数据格式。可选的 HDF5
+或其他格式导出器只能读取不可变的 LeRobot 源目录，并写入另一个派生输出目录。具体导出器
+将在关节和动作 schema 确定后实现，避免现在固化错误的数据定义。
 
-## Crash model
+## 夹爪与灵巧手
 
-The SQLite registry uses WAL mode and full synchronization. Starting an attempt commits its ID before frame
-capture starts. A clean finish transitions it to `success` or `failure`. On application restart, all remaining
-`recording` attempts become `interrupted`; IDs are never reused.
+夹爪和灵巧手共用采集框架、网页和元数据规范，但动作空间不兼容，因此必须分别使用：
 
-Formal data publication will use a staging directory and an atomic rename on the same filesystem. Partially
-written shards never appear in the canonical dataset index.
+- `robot_type=bpx_v2_gripper`：夹爪数据集及其独立模型；
+- `robot_type=bpx_v2_dexhand`：灵巧手数据集及其独立模型。
+
+不能通过补零或截断把两类动作向量强行合并。若未来要训练统一模型，应先设计明确的动作
+token、末端掩码或跨本体策略，并单独验证，而不是改写已采集数据。
+
+## 异常与断电模型
+
+SQLite 登记库使用 WAL 模式和完整同步。开始录制时，系统会在采集第一帧之前提交
+`attempt_id`。正常结束时，状态转为 `success` 或 `failure`。程序重启后，仍处于
+`recording` 的记录会自动转为 `interrupted`，编号永不复用。
+
+正式数据发布采用同一文件系统上的临时目录和原子重命名。未写完或未验收的分片不会进入
+权威数据集索引。
