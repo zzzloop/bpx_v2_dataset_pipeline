@@ -88,6 +88,7 @@ button:disabled { opacity: .3; cursor: not-allowed; }
 button.primary { background: var(--cyan); color: #051512; }
 button.success { background: #89e9a9; color: #07150d; }
 button.danger { background: rgba(255, 113, 137, .13); border: 1px solid rgba(255, 113, 137, .5); color: #ff90a3; }
+button.warning { background: rgba(255, 201, 104, .11); border: 1px solid rgba(255, 201, 104, .45); color: var(--amber); }
 button.secondary { width: 100%; padding: .68rem .55rem; color: #bdeee6; border: 1px solid rgba(76, 230, 207, .33); background: rgba(25, 78, 76, .3); font-size: .74rem; }
 button.ghost { color: #91aebb; border: 1px solid #294958; background: transparent; }
 .button-icon { margin-right: .35rem; }

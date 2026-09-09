@@ -98,7 +98,7 @@ class SessionStore:
     ) -> None:
         if status not in {AttemptStatus.SUCCESS, AttemptStatus.FAILURE, AttemptStatus.INTERRUPTED}:
             raise ValueError(f"Invalid terminal status: {status}")
-        stored_failure_reason = failure_reason.strip() if status is AttemptStatus.FAILURE else ""
+        stored_failure_reason = failure_reason.strip() if status == AttemptStatus.FAILURE else ""
         with closing(self._connect()) as connection:
             connection.execute("BEGIN IMMEDIATE")
             cursor = connection.execute(
@@ -121,6 +121,17 @@ class SessionStore:
                 connection.execute("ROLLBACK")
                 raise ValueError(f"Attempt {attempt_id} is missing or no longer recording")
             connection.execute("COMMIT")
+
+    def update_failure_reason(self, attempt_id: int, failure_reason: str) -> dict[str, Any]:
+        """Update the optional reason only after an attempt is durably marked failed."""
+        with closing(self._connect()) as connection:
+            cursor = connection.execute(
+                "UPDATE attempts SET failure_reason = ? WHERE attempt_id = ? AND status = ?",
+                (failure_reason.strip(), attempt_id, AttemptStatus.FAILURE),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"Attempt {attempt_id} is missing or is not marked as failure")
+        return self.get_attempt(attempt_id)
 
     def get_attempt(self, attempt_id: int) -> dict[str, Any]:
         with closing(self._connect()) as connection:

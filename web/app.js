@@ -2,6 +2,8 @@ const el = (id) => document.getElementById(id);
 const persistentFields = ["taskEn", "taskZh", "operator", "layout", "embodiment", "note"];
 const sessionId = localStorage.getItem("bpx.sessionId") || crypto.randomUUID();
 let recording = false;
+let finishing = false;
+let pendingFailedAttemptId = null;
 let catalog = { tasks: [], operators: [], layouts: [] };
 
 localStorage.setItem("bpx.sessionId", sessionId);
@@ -172,10 +174,10 @@ function formProblems() {
 
 function updateControls() {
   const problems = formProblems();
-  el("start").disabled = recording || problems.length > 0;
-  el("success").disabled = !recording;
-  el("failure").disabled = !recording;
-  if (!recording) setFailurePanel(false);
+  el("start").disabled = recording || finishing || pendingFailedAttemptId !== null || problems.length > 0;
+  el("success").disabled = !recording || finishing;
+  el("failure").disabled = !recording || finishing;
+  el("discard").disabled = !recording || finishing;
   el("formHint").textContent = recording
     ? "正在录制：请根据结果选择成功或失败。"
     : problems.length ? `还需完成：${problems.join("、")}` : "信息完整，可以开始新的录制。";
@@ -241,32 +243,63 @@ el("start").onclick = async () => {
 };
 
 async function finish(status) {
+  finishing = true;
+  updateControls();
   try {
     const result = await request("/api/attempts/finish", {
       status,
-      failure_reason: status === "failure" ? el("failureReason").value : "",
+      failure_reason: "",
       note: el("note").value,
     });
-    el("message").textContent = `attempt ${result.attempt_id} 已标记为${statusLabel(result.status)}。`;
-    el("failureReason").value = "";
-    setFailurePanel(false);
+    if (status === "failure") {
+      pendingFailedAttemptId = result.attempt_id;
+      setFailurePanel(true);
+      el("message").textContent = `attempt ${result.attempt_id} 已立即停止并标记为失败；失败原因可选。`;
+    } else {
+      el("message").textContent = `attempt ${result.attempt_id} 已标记为${statusLabel(result.status)}。`;
+      setFailurePanel(false);
+    }
     await loadCatalog();
     await refresh();
   } catch (error) {
     el("message").textContent = error.message;
+  } finally {
+    finishing = false;
+    updateControls();
   }
 }
 
 el("success").onclick = () => finish("success");
+el("discard").onclick = () => finish("interrupted");
 function setFailurePanel(open) {
   el("failurePanel").hidden = !open;
   el("failureReason").disabled = !open;
   if (open) el("failureReason").focus();
 }
 
-el("failure").onclick = () => setFailurePanel(true);
-el("confirmFailure").onclick = () => finish("failure");
-el("cancelFailure").onclick = () => setFailurePanel(false);
+el("failure").onclick = () => finish("failure");
+el("confirmFailure").onclick = async () => {
+  if (pendingFailedAttemptId === null) return;
+  try {
+    await request("/api/attempts/failure-reason", {
+      attempt_id: pendingFailedAttemptId,
+      failure_reason: el("failureReason").value,
+    });
+    el("message").textContent = `attempt ${pendingFailedAttemptId} 的失败原因已保存。`;
+    pendingFailedAttemptId = null;
+    el("failureReason").value = "";
+    setFailurePanel(false);
+    await refresh();
+  } catch (error) {
+    el("message").textContent = error.message;
+  }
+};
+el("cancelFailure").onclick = () => {
+  pendingFailedAttemptId = null;
+  el("failureReason").value = "";
+  setFailurePanel(false);
+  updateControls();
+};
 loadCatalog();
 refresh();
 setInterval(refresh, 1000);

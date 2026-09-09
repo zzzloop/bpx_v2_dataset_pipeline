@@ -43,6 +43,19 @@ class SessionStoreTest(unittest.TestCase):
             store.finish_attempt(failed, AttemptStatus.FAILURE, failure_reason="grasp slipped")
             self.assertEqual(store.get_attempt(failed)["failure_reason"], "grasp slipped")
 
+    def test_failure_reason_can_be_added_only_after_failed_attempt_stops(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SessionStore(pathlib.Path(directory) / "collector.sqlite3")
+            failed = store.begin_attempt(metadata())
+            store.finish_attempt(failed, AttemptStatus.FAILURE)
+            updated = store.update_failure_reason(failed, "object dropped")
+            self.assertEqual(updated["failure_reason"], "object dropped")
+
+            successful = store.begin_attempt(metadata())
+            store.finish_attempt(successful, AttemptStatus.SUCCESS)
+            with self.assertRaisesRegex(ValueError, "not marked as failure"):
+                store.update_failure_reason(successful, "must not persist")
+
 
 if __name__ == "__main__":
     unittest.main()

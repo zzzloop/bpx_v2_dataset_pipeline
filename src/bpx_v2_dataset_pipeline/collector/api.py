@@ -36,6 +36,11 @@ class TranslateRequest(BaseModel):
     chinese: str
 
 
+class FailureReasonRequest(BaseModel):
+    attempt_id: int
+    failure_reason: str = ""
+
+
 def create_app(*, state_dir: pathlib.Path, recordings_dir: pathlib.Path, mock: bool):
     try:
         from fastapi import FastAPI, HTTPException
@@ -115,6 +120,13 @@ def create_app(*, state_dir: pathlib.Path, recordings_dir: pathlib.Path, mock: b
                 note=request.note,
             )
         except (RuntimeError, ValueError) as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @app.post("/api/attempts/failure-reason")
+    async def update_failure_reason(request: FailureReasonRequest):
+        try:
+            return store.update_failure_reason(request.attempt_id, request.failure_reason)
+        except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 
     app.mount("/static", StaticFiles(directory=web_root), name="static")

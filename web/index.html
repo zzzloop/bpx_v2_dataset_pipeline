@@ -113,15 +113,16 @@
           <button id="start" class="primary" disabled><span class="button-icon">●</span> 开始新 attempt</button>
           <button id="success" class="success" disabled><span class="button-icon">✓</span> 结束并标记成功</button>
           <button id="failure" class="danger" disabled><span class="button-icon">×</span> 结束并标记失败</button>
+          <button id="discard" class="warning" disabled><span class="button-icon">■</span> 中断录制并作废本条</button>
         </div>
         <div id="failurePanel" class="failure-panel" hidden>
           <label class="field failure-reason">
-            <span>失败原因 <em>可选，只写入失败记录</em></span>
+            <span>失败原因 <em>录制已停止，可选填写</em></span>
             <input id="failureReason" placeholder="例如：抓取滑落、遮挡、遥操中断" disabled />
           </label>
           <div class="failure-actions">
-            <button id="confirmFailure" class="danger" type="button">确认失败并结束</button>
-            <button id="cancelFailure" class="ghost" type="button">返回继续录制</button>
+            <button id="confirmFailure" class="danger" type="button">保存失败原因</button>
+            <button id="cancelFailure" class="ghost" type="button">不填写，关闭</button>
           </div>
         </div>
         <p id="message" role="status"></p>
