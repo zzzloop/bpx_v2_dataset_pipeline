@@ -1,0 +1,146 @@
+schema_version = "bpx-v2-ros2-jazzy-hardware-v2"
+contract_status = "production_ready"
+
+[ros2]
+node_name = "bpx_v2_dataset_collector"
+namespace = ""
+subscriber_only = true
+
+[sampling]
+dataset_fps = 30.0
+image_sync_tolerance_ms = 20.0
+joint_max_age_ms = 50.0
+gripper_max_age_ms = 250.0
+queue_depth = 16
+
+[training_schema]
+action_dimension = 18
+action_order = [
+  "left_arm_0", "left_arm_1", "left_arm_2", "left_arm_3", "left_arm_4", "left_arm_5", "left_arm_6",
+  "right_arm_0", "right_arm_1", "right_arm_2", "right_arm_3", "right_arm_4", "right_arm_5", "right_arm_6",
+  "head_pan", "head_tilt", "left_gripper", "right_gripper",
+]
+state_dimension = 18
+state_order = [
+  "left_arm_0", "left_arm_1", "left_arm_2", "left_arm_3", "left_arm_4", "left_arm_5", "left_arm_6",
+  "right_arm_0", "right_arm_1", "right_arm_2", "right_arm_3", "right_arm_4", "right_arm_5", "right_arm_6",
+  "head_pan", "head_tilt", "left_gripper", "right_gripper",
+]
+
+[actions.arm]
+topic = "/arm_joint_command"
+message_type = "stm32_ros_bridge_msgs/msg/ArmJointCommand"
+field = "position"
+dimension = 14
+unit = "rad"
+order = [
+  "left_arm_0", "left_arm_1", "left_arm_2", "left_arm_3", "left_arm_4", "left_arm_5", "left_arm_6",
+  "right_arm_0", "right_arm_1", "right_arm_2", "right_arm_3", "right_arm_4", "right_arm_5", "right_arm_6",
+]
+required = true
+authoritative_final_target = true
+
+[actions.head]
+topic = "/head_joint_command"
+message_type = "stm32_ros_bridge_msgs/msg/HeadJointCommand"
+field = "position"
+dimension = 2
+source_unit = "degree"
+storage_unit = "rad"
+order = ["head_pan", "head_tilt"]
+required = true
+authoritative_final_target = true
+
+[actions.gripper]
+topic = "/gripper_move"
+message_type = "stm32_ros_bridge_msgs/msg/GripperMove"
+field = "grippers[].position"
+dimension = 2
+source_range = [0.0, 100.0]
+storage_range = [0.0, 1.0]
+order = ["left_gripper", "right_gripper"]
+required = true
+authoritative_final_target = true
+
+[observations.arm]
+topic = "/arm_joint_feedback"
+message_type = "stm32_ros_bridge_msgs/msg/ArmJointFeedback"
+field = "position"
+dimension = 14
+unit = "rad"
+required = true
+
+[observations.head]
+topic = "/head_joint_feedback"
+message_type = "stm32_ros_bridge_msgs/msg/HeadJointFeedback"
+field = "position"
+dimension = 2
+source_unit = "degree"
+storage_unit = "rad"
+required = true
+
+[observations.gripper]
+topic = "/gripper_status"
+message_type = "stm32_ros_bridge_msgs/msg/GripperStatus"
+field = "grippers[].position"
+dimension = 2
+source_range = [0.0, 100.0]
+storage_range = [0.0, 1.0]
+source_hz = 10.0
+sampling = "latest_at_or_before_camera_frame"
+order = ["left_gripper", "right_gripper"]
+required = true
+
+[observations.tactile]
+topic = "/gripper_tactile"
+message_type = "stm32_ros_bridge_msgs/msg/GripperTactile"
+required = false
+record = false
+note = "Hardware integration is unfinished; excluded from this schema version."
+
+[cameras.left_eye]
+topic = "/data/left_eye_image"
+message_type = "sensor_msgs/msg/Image"
+encoding = "from_message"
+width = 640
+height = 480
+fps = 30.0
+source_status = "confirmed"
+required = true
+
+[cameras.right_eye]
+topic = "/data/right_eye_image"
+message_type = "sensor_msgs/msg/Image"
+encoding = "from_message"
+width = 640
+height = 480
+fps = 30.0
+source_status = "confirmed"
+required = true
+
+[cameras.left_wrist]
+topic = "/data/left_wrist_image"
+message_type = "sensor_msgs/msg/Image"
+encoding = "from_message"
+width = 640
+height = 480
+fps = 30.0
+source_status = "confirmed"
+required = true
+
+[cameras.right_wrist]
+topic = "/data/right_wrist_image"
+message_type = "sensor_msgs/msg/Image"
+encoding = "from_message"
+width = 640
+height = 480
+fps = 30.0
+source_status = "confirmed"
+required = true
+
+[robot]
+urdf_file = "AM-DP123.urdf"
+urdf_sha256 = "0247596FEEEC4647B30BE10055B880CFD9E7AF15C2497766B43986957AE1B2E1"
+arm_feedback_order = "left indices 0..6, right indices 7..13"
+head_feedback_order = "head_pan, head_tilt"
+gripper_feedback_order = "grippers[0] left, grippers[1] right"

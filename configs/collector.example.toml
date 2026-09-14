@@ -1,5 +1,5 @@
 [collector]
-mode = "mock"
+mode = "ros2"
 state_dir = "state"
 recordings_dir = "recordings/lerobot/bpx_v2_humanoid_raw"
 host = "127.0.0.1"
@@ -7,13 +7,12 @@ port = 8765
 
 [capture]
 fps = 30
-sync_tolerance_ms = 15
-max_sensor_age_ms = 100
+image_sync_tolerance_ms = 20
+joint_max_age_ms = 50
+gripper_max_age_ms = 250
 
-# Hardware-specific values deliberately remain unset until the ROS2 contract is frozen.
 [ros2]
 node_name = "bpx_v2_dataset_collector"
-camera_topics = []
-state_topic = ""
-action_topic = ""
+hardware_contract = "configs/ros2-jazzy-hardware.toml"
+subscriber_only = true
 

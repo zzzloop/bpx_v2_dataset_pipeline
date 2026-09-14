@@ -3,6 +3,7 @@ const persistentFields = ["taskEn", "taskZh", "operator", "layout", "embodiment"
 const sessionId = localStorage.getItem("bpx.sessionId") || crypto.randomUUID();
 let recording = false;
 let finishing = false;
+let hardwareReady = false;
 let pendingFailedAttemptId = null;
 let catalog = { tasks: [], operators: [], layouts: [] };
 
@@ -174,13 +175,44 @@ function formProblems() {
 
 function updateControls() {
   const problems = formProblems();
-  el("start").disabled = recording || finishing || pendingFailedAttemptId !== null || problems.length > 0;
+  el("start").disabled = recording || finishing || pendingFailedAttemptId !== null || problems.length > 0 || !hardwareReady;
   el("success").disabled = !recording || finishing;
   el("failure").disabled = !recording || finishing;
   el("discard").disabled = !recording || finishing;
   el("formHint").textContent = recording
     ? "正在录制：请根据结果选择成功或失败。"
-    : problems.length ? `还需完成：${problems.join("、")}` : "信息完整，可以开始新的录制。";
+    : problems.length ? `还需完成：${problems.join("、")}`
+      : !hardwareReady ? "采集输入尚未齐全；收到四路图像、状态和动作后自动开放录制。"
+        : "信息完整，采集输入正常，可以开始新的录制。";
+}
+
+function showRate(id, rates, key) {
+  const value = rates[key];
+  el(id).textContent = Number.isFinite(value) ? `${value.toFixed(1)} Hz` : "—";
+}
+
+function renderCaptureHealth(state) {
+  const health = state.capture_health || {};
+  hardwareReady = health.ready === true;
+  const badge = el("sensorBadge");
+  badge.textContent = hardwareReady ? "输入已就绪" : "等待 ROS2 数据";
+  badge.className = `contract-badge ${hardwareReady ? "ready" : "pending"}`;
+  const missing = [...(health.missing || []), ...(health.stale || [])];
+  const error = state.capture_error || health.last_error || "";
+  el("sensorDetail").textContent = error
+    ? `采集异常：${error}`
+    : missing.length ? `等待或过期：${missing.join("、")}` : "四路相机 30Hz 主时轴 · 关节最近采样 · 夹爪 10Hz 保持";
+  const rates = health.rates_hz || {};
+  showRate("rateLeftEye", rates, "left_eye");
+  showRate("rateRightEye", rates, "right_eye");
+  showRate("rateLeftWrist", rates, "left_wrist");
+  showRate("rateRightWrist", rates, "right_wrist");
+  showRate("rateArmState", rates, "arm_state");
+  showRate("rateHeadState", rates, "head_state");
+  showRate("rateGripperState", rates, "gripper_state");
+  el("syncFrames").textContent = Number(health.frames_built || 0).toLocaleString();
+  const skew = health.last_frame && health.last_frame.image_skew_ms;
+  el("syncSkew").textContent = Number.isFinite(skew) ? `图像偏差 ${skew.toFixed(1)} ms` : "图像偏差 —";
 }
 
 function statusLabel(status) {
@@ -197,6 +229,18 @@ async function refresh() {
     el("backend").textContent = state.backend;
     el("attemptNumber").textContent = recording ? `#${state.active_attempt.attempt_id}` : "—";
     el("frameCount").textContent = recording ? state.active_attempt.frame_count.toLocaleString() : "0";
+    renderCaptureHealth(state);
+    const contract = state.hardware_contract || {};
+    const ready = contract.production_ready === true;
+    el("contractBadge").textContent = ready ? "硬件契约已闭合" : "硬件契约待补全";
+    el("contractBadge").className = `contract-badge ${ready ? "ready" : "pending"}`;
+    el("contractVersion").textContent = contract.schema_version || "未加载";
+    el("armContract").textContent = contract.selected_action_dimension
+      ? `${contract.selected_action_dimension}D · 双臂 14 + 头部 2 + 双夹爪 2`
+      : "未确认";
+    const missing = contract.missing || [];
+    el("contractMissing").textContent = missing.length ? `${missing.length} 项缺失` : "已闭合 · 18D + 四路 RGB";
+    el("contractMissing").title = missing.join("\n");
     el("attempts").replaceChildren(...state.recent_attempts.map((item) => {
       const row = document.createElement("tr");
       const values = [item.attempt_id, item.status, item.task_en, item.operator_id, item.layout_id, item.embodiment];

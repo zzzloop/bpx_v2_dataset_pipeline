@@ -33,6 +33,7 @@ class MockCaptureBackend(CaptureBackend):
                 images={name: image.copy() for name in ("left_eye", "right_eye", "left_wrist", "right_wrist")},
                 state=np.zeros(1, dtype=np.float32),
                 action=np.zeros(1, dtype=np.float32),
+                diagnostics={"mock": True},
             )
             self._index += 1
 

@@ -21,12 +21,11 @@
 ## 可插拔边界
 
 `CaptureBackend` 是唯一允许了解 ROS2 topic、消息类型、QoS、图像编码和同步策略的组件。
-模拟后端无需 ROS2 即可验证同一套服务接口。硬件协议确定后，可以增加
-`Ros2JazzyBackend`，而无需修改网页、attempt 数据库、服务器工具或训练集成代码。
+模拟后端无需 ROS2 即可验证同一套服务接口。正式的 `Ros2JazzyCaptureBackend` 已按冻结
+契约实现，并通过相同接口向 LeRobot v2.1 MP4 writer 提供 30Hz 同步帧。
 
 服务器侧采用对应的 `DatasetExporter` 接口。LeRobot 是唯一的权威数据格式。可选的 HDF5
-或其他格式导出器只能读取不可变的 LeRobot 源目录，并写入另一个派生输出目录。具体导出器
-将在关节和动作 schema 确定后实现，避免现在固化错误的数据定义。
+或其他格式导出器只能读取不可变的 LeRobot 源目录，并写入另一个派生输出目录。
 
 ## 夹爪与灵巧手
 
@@ -44,5 +43,6 @@ SQLite 登记库使用 WAL 模式和完整同步。开始录制时，系统会�
 `attempt_id`。正常结束时，状态转为 `success` 或 `failure`。程序重启后，仍处于
 `recording` 的记录会自动转为 `interrupted`，编号永不复用。
 
-正式数据发布采用同一文件系统上的临时目录和原子重命名。未写完或未验收的分片不会进入
-权威数据集索引。
+正式采集只有点击“成功”时才调用 LeRobot `save_episode()`；失败和中断会等待异步图像写入
+完成后清除 episode buffer 和临时图像，不会进入权威数据集索引。程序异常退出时 SQLite
+将 attempt 恢复为 interrupted；残留的未提交图片不会被训练数据索引引用。

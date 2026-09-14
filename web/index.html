@@ -30,6 +30,35 @@
         <div class="metric"><span>本次会话</span><b id="sessionShort">—</b></div>
       </section>
 
+      <section class="contract-strip" aria-live="polite">
+        <div class="contract-heading">
+          <span id="contractBadge" class="contract-badge pending">硬件契约待补全</span>
+          <div>
+            <strong>ROS2 采集数据契约</strong>
+            <small id="contractVersion">正在读取配置</small>
+          </div>
+        </div>
+        <div class="contract-fact"><span>训练动作</span><b id="armContract">18D · 双臂 + 头部 + 双夹爪</b></div>
+        <div class="contract-fact wide"><span>正式采集输入</span><b id="contractMissing">正在检查</b></div>
+      </section>
+
+      <section class="sensor-panel" aria-live="polite">
+        <div class="sensor-heading">
+          <div><span id="sensorBadge" class="contract-badge pending">等待 ROS2 数据</span><strong>实时同步质量</strong></div>
+          <small id="sensorDetail">四路相机 30Hz 主时轴 · 关节最近采样 · 夹爪 10Hz 保持</small>
+        </div>
+        <div class="sensor-grid">
+          <div class="sensor-card"><span>左眼</span><b id="rateLeftEye">—</b><small>/data/left_eye_image</small></div>
+          <div class="sensor-card"><span>右眼</span><b id="rateRightEye">—</b><small>/data/right_eye_image</small></div>
+          <div class="sensor-card"><span>左腕</span><b id="rateLeftWrist">—</b><small>/data/left_wrist_image</small></div>
+          <div class="sensor-card"><span>右腕</span><b id="rateRightWrist">—</b><small>/data/right_wrist_image</small></div>
+          <div class="sensor-card"><span>双臂反馈</span><b id="rateArmState">—</b><small>14D · rad</small></div>
+          <div class="sensor-card"><span>头部反馈</span><b id="rateHeadState">—</b><small>2D · degree → rad</small></div>
+          <div class="sensor-card"><span>夹爪反馈</span><b id="rateGripperState">—</b><small>2D · 0–100 → 0–1</small></div>
+          <div class="sensor-card"><span>同步输出</span><b id="syncFrames">0</b><small id="syncSkew">图像偏差 —</small></div>
+        </div>
+      </section>
+
       <section class="workspace">
         <article class="panel task-panel">
           <div class="section-title">
@@ -89,7 +118,7 @@
               <span>末端执行器</span>
               <select id="embodiment">
                 <option value="gripper">夹爪 · bpx_v2_gripper</option>
-                <option value="dexterous_hand">因时灵巧手 · bpx_v2_dexhand</option>
+                <option value="dexterous_hand" disabled>因时灵巧手 · 待单独建模</option>
               </select>
             </label>
           </div>

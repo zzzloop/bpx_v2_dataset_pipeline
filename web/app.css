@@ -46,6 +46,28 @@ h1 { margin: 0; font-size: clamp(2.1rem, 5vw, 4.2rem); font-weight: 760; letter-
 .metric b { margin-top: .35rem; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @keyframes pulse { 50% { opacity: .35; transform: scale(.7); } }
 
+.contract-strip { display: grid; grid-template-columns: 1.25fr .7fr 1.4fr; align-items: stretch; margin-top: .75rem; border: 1px solid rgba(255, 201, 104, .24); border-radius: 14px; background: rgba(41, 31, 15, .42); overflow: hidden; }
+.contract-heading, .contract-fact { display: flex; align-items: center; gap: .8rem; min-height: 68px; padding: .85rem 1rem; border-right: 1px solid rgba(255, 201, 104, .16); }
+.contract-heading strong, .contract-heading small, .contract-fact span, .contract-fact b { display: block; }
+.contract-heading small, .contract-fact span { color: #829aa5; font-size: .68rem; margin-top: .18rem; }
+.contract-fact { display: grid; gap: .2rem; }
+.contract-fact b { color: #dbe9ee; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contract-badge { flex: 0 0 auto; padding: .32rem .5rem; border-radius: 999px; font-size: .66rem; font-weight: 800; }
+.contract-badge.pending { color: var(--amber); border: 1px solid rgba(255, 201, 104, .38); background: rgba(255, 201, 104, .08); }
+.contract-badge.ready { color: var(--cyan); border: 1px solid rgba(76, 230, 207, .38); background: rgba(76, 230, 207, .08); }
+
+.sensor-panel { margin-top: .75rem; padding: 1rem; border: 1px solid var(--line); border-radius: 16px; background: rgba(9, 23, 33, .78); }
+.sensor-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .8rem; }
+.sensor-heading > div { display: flex; align-items: center; gap: .7rem; }
+.sensor-heading strong { font-size: .86rem; }
+.sensor-heading small { color: var(--muted); font-size: .72rem; }
+.sensor-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: .55rem; }
+.sensor-card { min-width: 0; padding: .75rem; border: 1px solid rgba(128, 176, 198, .14); border-radius: 10px; background: rgba(17, 38, 50, .62); }
+.sensor-card span, .sensor-card b, .sensor-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sensor-card span { color: #7896a4; font-size: .65rem; }
+.sensor-card b { margin: .28rem 0; color: #dff7f3; font-size: .9rem; }
+.sensor-card small { color: #55717f; font-size: .58rem; }
+
 .workspace { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(340px, .8fr); gap: 1rem; margin-top: 1rem; }
 .panel { border: 1px solid var(--line); border-radius: 18px; padding: 1.35rem; background: var(--panel); box-shadow: 0 24px 70px rgba(0, 0, 0, .16); backdrop-filter: blur(18px); }
 .control-panel, .history-panel { margin-top: 1rem; }
@@ -117,6 +139,9 @@ td:nth-child(3) { color: #d7e7ee; max-width: 410px; }
   .metric { border-top: 1px solid var(--line); }
   .translation-grid { grid-template-columns: 1fr; }
   .translate-column { margin-top: 0; }
+  .contract-strip { grid-template-columns: 1fr; }
+  .contract-heading, .contract-fact { border-right: 0; border-bottom: 1px solid rgba(255, 201, 104, .16); }
+  .sensor-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
   main { width: min(94vw, 1320px); padding-top: 1.5rem; }
@@ -125,4 +150,7 @@ td:nth-child(3) { color: #d7e7ee; max-width: 410px; }
   .section-title { display: block; }
   .section-title p { text-align: left; margin-top: .6rem; }
   .control-row { display: grid; }
+  .sensor-heading { display: block; }
+  .sensor-heading small { display: block; margin-top: .5rem; }
+  .sensor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -5,11 +5,15 @@ import asyncio
 import dataclasses
 import pathlib
 import uuid
+from contextlib import asynccontextmanager
 
 from pydantic import BaseModel
 
 from bpx_v2_dataset_pipeline.collector.catalog import DEFAULT_LAYOUTS, DEFAULT_OPERATORS, TASK_PRESETS
+from bpx_v2_dataset_pipeline.collector.episode_writer import LeRobotV21EpisodeWriter, NullEpisodeWriter
+from bpx_v2_dataset_pipeline.collector.hardware_contract import load_hardware_contract, summarize_hardware_contract
 from bpx_v2_dataset_pipeline.collector.mock_backend import MockCaptureBackend
+from bpx_v2_dataset_pipeline.collector.ros2_backend import Ros2JazzyCaptureBackend
 from bpx_v2_dataset_pipeline.collector.service import CollectorService
 from bpx_v2_dataset_pipeline.collector.translator import TaskTranslator
 from bpx_v2_dataset_pipeline.models import AttemptMetadata, AttemptStatus
@@ -41,23 +45,40 @@ class FailureReasonRequest(BaseModel):
     failure_reason: str = ""
 
 
-def create_app(*, state_dir: pathlib.Path, recordings_dir: pathlib.Path, mock: bool):
+def create_app(
+    *,
+    state_dir: pathlib.Path,
+    recordings_dir: pathlib.Path,
+    mock: bool,
+    hardware_contract_path: pathlib.Path | None = None,
+):
     try:
         from fastapi import FastAPI, HTTPException
         from fastapi.responses import FileResponse
         from fastapi.staticfiles import StaticFiles
     except ImportError as error:
         raise RuntimeError("Install the collector extra: uv sync --extra collector") from error
-    if not mock:
-        raise RuntimeError("ROS2 backend is intentionally disabled until the hardware data contract is frozen")
-
+    project_root = pathlib.Path(__file__).resolve().parents[3]
+    contract_path = hardware_contract_path or project_root / "configs" / "ros2-jazzy-hardware.toml"
+    contract = load_hardware_contract(contract_path)
+    contract_summary = summarize_hardware_contract(contract)
     store = SessionStore(state_dir / "collector.sqlite3")
     store.recover_interrupted()
-    service = CollectorService(store, MockCaptureBackend(), recordings_dir)
-    project_root = pathlib.Path(__file__).resolve().parents[3]
+    backend = MockCaptureBackend() if mock else Ros2JazzyCaptureBackend(contract)
+    writer = NullEpisodeWriter() if mock else LeRobotV21EpisodeWriter(recordings_dir)
+    service = CollectorService(store, backend, recordings_dir, writer)
     translator = TaskTranslator.from_project(project_root)
     web_root = project_root / "web"
-    app = FastAPI(title="BPX v2 Dataset Collector")
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        await backend.start()
+        try:
+            yield
+        finally:
+            await service.close()
+
+    app = FastAPI(title="BPX v2 Dataset Collector", lifespan=lifespan)
 
     @app.get("/")
     async def index():
@@ -65,7 +86,7 @@ def create_app(*, state_dir: pathlib.Path, recordings_dir: pathlib.Path, mock: b
 
     @app.get("/api/status")
     async def status():
-        return service.status()
+        return service.status() | {"hardware_contract": contract_summary}
 
     @app.get("/api/catalog")
     async def catalog():
@@ -144,10 +165,21 @@ def main() -> None:
         type=pathlib.Path,
         default=pathlib.Path("recordings/lerobot/bpx_v2_humanoid_raw"),
     )
+    parser.add_argument(
+        "--hardware-contract",
+        type=pathlib.Path,
+        default=None,
+        help="ROS2 hardware contract TOML; defaults to the bundled, frozen BPX v2 gripper contract",
+    )
     args = parser.parse_args()
     import uvicorn
 
-    app = create_app(state_dir=args.state_dir, recordings_dir=args.recordings_dir, mock=args.mock)
+    app = create_app(
+        state_dir=args.state_dir,
+        recordings_dir=args.recordings_dir,
+        mock=args.mock,
+        hardware_contract_path=args.hardware_contract,
+    )
     uvicorn.run(app, host=args.host, port=args.port)
 
 

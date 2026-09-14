@@ -1,16 +1,16 @@
 # BPX v2 Dataset Pipeline
 
-面向第二代半人型机器人的数据工程仓库。当前版本先固定工程边界、元数据契约、故障恢复、
-网页工作流、数值毛刺算法和在线视觉增强；ROS2 topic、关节顺序、动作维度和相机规格等硬件
-契约明确后，再增加真机 adapter 与正式 LeRobot writer。
+面向第二代半人型机器人的数据工程仓库。硬件契约已经冻结：四路 640×480@30Hz 图像、
+双臂 14D、头部 2D 和双夹爪 2D。ROS2 Jazzy 后端只订阅数据，不创建任何机器人控制
+publisher；成功示教直接保存为带 MP4 的 LeRobot v2.1 episode。
 
 ## 工程边界
 
 ```text
 工控机 / ROS2 Jazzy
-  Web UI -> Collector service -> CaptureBackend -> ROS2 adapter（待硬件契约）
+  Web UI -> Collector service -> CaptureBackend -> ROS2 Jazzy 纯订阅 adapter
                  |
-                 +-> 单次 attempt 事务、状态数据库、LeRobot episode shard
+                 +-> 单次 attempt 事务、状态数据库、LeRobot v2.1 MP4 episode
 
 服务器
   入库审计 -> 按末端合并 -> 多进程毛刺扫描/清洗 -> 数据版本发布
@@ -33,9 +33,9 @@
 崩溃，该编号都不会再次使用。例如 attempt 5 失败，下一次一定是 attempt 6。训练数据合并时
 再给成功 episode 建立连续的 `episode_index`，二者互不混淆。
 
-## 当前可运行内容
+## 安装与运行
 
-安装开发环境：
+开发机运行测试：
 
 ```bash
 uv sync --extra collector --extra server --extra dev
@@ -50,6 +50,25 @@ uv run bpx-v2-collector --mock --host 127.0.0.1 --port 8765
 
 打开 `http://127.0.0.1:8765`。模拟模式只验证交互与恢复逻辑，不发布机器人命令，也不生成
 正式训练数据。
+
+ROS2 Jazzy 工控机首次在线安装（只需一次）：
+
+```bash
+bash scripts/install_collector_once.sh
+```
+
+该脚本创建可读取系统 ROS2 包的 `.venv`，安装网页依赖，并把 LeRobot 固定到 OpenPI 当前
+使用的 v2.1 commit。之后启动不使用 `uv run`，不会联网、解析或下载依赖：
+
+```bash
+# 自定义消息若位于机器人工作空间，填其 install/setup.bash
+export BPX_ROBOT_SETUP=/path/to/robot_ws/install/setup.bash
+bash scripts/start_collector.sh
+```
+
+默认数据目录为 `recordings/lerobot/bpx_v2_humanoid_raw`。可以用
+`BPX_RECORDINGS_DIR=/data/...` 覆盖。正式模式只有四路相机、状态和 command 全部就绪后才允许
+点击开始；触觉当前明确排除。
 
 ## 项目内 DeepSeek 翻译
 
@@ -70,16 +89,6 @@ cp .env.example .env.local
 “中断录制并作废本条”同样会立即停止，但状态记为 `interrupted`，保留审计记录和不会复用的
 attempt 编号，不作为成功训练 episode 使用。
 
-## 尚需硬件组提供的契约
-
-正式 ROS2 adapter 开发前必须冻结：
-
-1. 四路图像 topic、message type、encoding、分辨率、帧率和 QoS；
-2. qpos 与遥操 action 的 topic、message type、关节名称、顺序、单位和时间戳来源；
-3. 夹爪及因时灵巧手分别的动作维度、反馈维度、耦合关系与有效范围；
-4. 同步容差、掉帧规则、episode 开始/结束定义；
-5. URDF/SRDF 与标定文件版本（用于名字、范围和未来 FK/仿真验证）；
-6. 是否保留可选的 ROS2 MCAP 影子记录作为原始证据。
-
 详细设计见 [architecture.md](docs/architecture.md)、[data-contract.md](docs/data-contract.md) 和
-[operations.md](docs/operations.md)。
+[operations.md](docs/operations.md)。正式 Topic、单位、同步策略及 URDF 校验值见
+[ros2-hardware-contract.md](docs/ros2-hardware-contract.md)。
