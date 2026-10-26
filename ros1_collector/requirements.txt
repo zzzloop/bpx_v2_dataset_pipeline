@@ -1,0 +1,3 @@
+# ROS Noetic / Ubuntu 20.04 / Python 3.8. No torch, LeRobot, ROS2 or OpenPI runtime.
+numpy==1.24.4
+pyarrow==14.0.2

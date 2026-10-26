@@ -1,5 +1,10 @@
 # BPX v2 Dataset Pipeline
 
+**一代 ROS1 的最简数采入口现已单独提供：**
+见 [一代ROS1数采说明](ros1_collector/README.md)，使用 `scripts/start_ros1_collector.sh`。
+三路640×360、目标30Hz，保存一代18维state/action和独立MP4；不使用下文的ROS2环境或复杂页面。
+二代ROS2入口保持不变，两代的数据集、映射和环境不能混用。
+
 面向第二代半人型机器人的数据工程仓库。硬件契约已经冻结：四路 640×480@30Hz 图像、
 双臂 14D、头部 2D 和双夹爪 2D。ROS2 Jazzy 后端只订阅数据，不创建任何机器人控制
 publisher；成功示教直接保存为带 MP4 的 LeRobot v2.1 episode。

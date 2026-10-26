@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>一代 ROS1 · LeRobot 数采</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f4f7fa;color:#17352f;font:16px system-ui,sans-serif}
+main{max-width:940px;margin:50px auto;padding:24px}section{background:white;border:1px solid #d9e5e1;border-radius:16px;padding:26px;margin:18px 0}
+h1{font-size:27px;margin:0 0 12px}p,small{color:#526d66;line-height:1.65}textarea{font:inherit;width:100%;padding:14px;border:1px solid #bfd2ca;border-radius:9px;margin:10px 0 20px}
+button{font:inherit;padding:12px 22px;border:0;border-radius:9px;background:#146d5c;color:white;cursor:pointer;margin:0 8px 8px 0}
+button.secondary{background:#e6eeea;color:#244f42}button:disabled{opacity:.42;cursor:default}.metrics{display:flex;gap:34px;flex-wrap:wrap}.metric strong{font-size:28px;display:block}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f7f6;padding:14px;border-radius:8px;font-size:13px}#error{color:#ad3227}#state{font-weight:700}label{font-weight:600}
+</style></head><body><main>
+<h1>一代 ROS1 · LeRobot 数采</h1><p>三路相机 640×360 · 目标30Hz · state/action逐帧配对 · 独立MP4<br>仅订阅现有话题，不使能电机，不启动策略，不发布控制指令。</p>
+<section><label for="task">本次示教任务（建议英文，之后每条沿用，可随时在空闲时修改）</label>
+<textarea id="task" rows="2" maxlength="256">Place all the colored blocks on the table into the bucket.</textarea>
+<button id="start">开始录制</button><button id="stop" disabled>停止并保存</button><button id="discard" class="secondary" disabled>丢弃本条</button>
+<p id="state">正在连接…</p><p id="error" role="alert"></p></section>
+<section><div class="metrics"><div class="metric"><strong id="frames">0</strong>本条帧数</div><div class="metric"><strong id="fps">—</strong>实际采样Hz / 目标30</div><div class="metric"><strong id="episodes">0</strong>已保存episode</div></div>
+<p>保存位置：<code id="path">—</code></p><p id="message"></p><details><summary>话题就绪状态与频率</summary><pre id="health"></pre></details>
+<p><small>停止后立刻结束取样，再关闭MP4并核验三路视频与数值帧数。保存期间请勿退出。没有人为补帧、平滑或在线增强；异常条不会自动进入训练集。</small></p></section>
+</main><script>
+const $=id=>document.getElementById(id);let busy=false,requestError='';
+try{$('task').value=localStorage.getItem('bpxV1Task')||$('task').value}catch(e){}
+const labels={idle:'空闲',starting:'正在初始化录制',recording:'正在录制',saving:'已停止取样 · 正在关闭视频并校验保存',discarding:'正在丢弃本条临时数据',error:'录制异常 · 请检查话题，丢弃本条后重录'};
+function show(s){$('frames').textContent=s.frames;$('fps').textContent=s.effective_fps==null?'—':s.effective_fps.toFixed(1);$('episodes').textContent=s.saved_episodes;$('path').textContent=s.output_dir;$('state').textContent=labels[s.state]||s.state;$('error').textContent=s.error||requestError;$('health').textContent=JSON.stringify(s.health,null,2);$('start').disabled=busy||s.state!=='idle'||!s.health.ready;$('stop').disabled=busy||s.state!=='recording';$('discard').disabled=busy||!['recording','error'].includes(s.state);$('task').disabled=s.state!=='idle';if(s.last){$('message').textContent=s.last.discarded?s.last.message:`已保存 episode ${s.last.episode_index}：${s.last.frames}帧，实际${s.last.effective_fps.toFixed(2)}Hz。${s.last.warning||''}`}else if(s.state==='idle'){$('message').textContent=s.health.ready?'数据已就绪，可以开始示教。':'等待相机、关节反馈和遥操动作指令；不需要启动推理。'}}
+async function refresh(){try{const r=await fetch('/api/state');if(!r.ok)throw Error('HTTP '+r.status);show(await r.json())}catch(e){$('state').textContent='连接中断';$('error').textContent=e.message;$('start').disabled=true;$('stop').disabled=true;$('discard').disabled=true}}
+async function action(path){if(busy)return;busy=true;requestError='';try{const task=$('task').value.trim();const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-BPX-Collector':'1'},body:JSON.stringify({task})});const s=await r.json();if(!r.ok)throw Error(s.error);try{localStorage.setItem('bpxV1Task',task)}catch(e){}busy=false;show(s)}catch(e){requestError=e.message;$('error').textContent=requestError}finally{busy=false;await refresh()}}
+$('start').onclick=()=>action('start');$('stop').onclick=()=>action('stop');$('discard').onclick=()=>{if(confirm('丢弃当前未保存的数据？已保存的episode不会受影响。'))action('discard')};setInterval(refresh,1000);refresh();
+</script></body></html>
