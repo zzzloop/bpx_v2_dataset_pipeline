@@ -10,12 +10,13 @@ from pathlib import Path
 import select
 import shutil
 import subprocess
+import tempfile
 import time
-import uuid
 
 import numpy as np
 
 from ros1_collector.contract import CAMERAS, JOINT_NAMES, MOTOR_NAMES, STREAMS
+from ros1_collector.numbering import next_take_number, reserve_take_number
 
 DATA_PATH = "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet"
 VIDEO_PATH = "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4"
@@ -50,6 +51,32 @@ def sha256(path):
     return result.hexdigest()
 
 
+def arrow_type(dtype):
+    import pyarrow as pa
+    return {"float32": pa.float32, "float64": pa.float64, "int64": pa.int64}[dtype]()
+
+
+def check_save_dependencies():
+    """Exercise the actual Arrow path BEFORE users spend time recording a take."""
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        table = pa.table({"scalar": pa.array([0.], type=pa.float32()),
+                          "vector": pa.array([[0., 1.]], type=pa.list_(pa.float32(), 2))})
+        with tempfile.TemporaryDirectory(prefix="bpx-ros1-arrow-") as temporary:
+            path = Path(temporary) / "check.parquet"
+            pq.write_table(table, path)
+            if not pq.ParquetFile(path).read().equals(table):
+                raise RuntimeError("Parquet read-back mismatch")
+        print("[PASS] Parquet save/read check: NumPy %s, PyArrow %s" % (np.__version__, pa.__version__), flush=True)
+    except Exception as error:
+        raise RuntimeError(
+            "数采保存依赖自检失败，尚未开始录制。请只修复项目虚拟环境："
+            ".venv-ros1/bin/python -m pip install --only-binary=:all: -r ros1_collector/requirements.txt; "
+            "原始错误: " + str(error)
+        ) from error
+
+
 def features():
     result = {key: {"dtype": dtype, "shape": [1], "names": None} for key, dtype in SCALARS.items()}
     for key, names, dtype in (
@@ -72,8 +99,8 @@ def features():
 class DatasetWriter:
     def __init__(self, root, config):
         import fcntl
-        import pyarrow  # Fail before recording, never download dependencies at runtime.
-        del pyarrow
+        # Fail before recording, never download dependencies at runtime.
+        check_save_dependencies()
         self.root, self.config = Path(root).resolve(), config
         self.schema = features()
         if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
@@ -98,11 +125,13 @@ class DatasetWriter:
         atomic(owner, identity)
         self.pending = self.root / ".bpx_pending"
         self.commits = self.root / ".bpx_commits"
+        self.takes = self.root / "takes"
         self.pending.mkdir(exist_ok=True)
         self.commits.mkdir(exist_ok=True)
+        self.takes.mkdir(exist_ok=True)
         self.active = None
         # A completed transaction can be recovered; incomplete takes remain inspectable.
-        for descriptor in sorted(self.pending.glob("*/commit.json")):
+        for descriptor in sorted(self.pending.glob("*/commit.json"), key=lambda path: load(path)["episode_index"]):
             self._publish(descriptor.parent, load(descriptor))
         self._metadata()
 
@@ -139,10 +168,14 @@ class DatasetWriter:
     def begin(self, task):
         if self.active is not None:
             raise RuntimeError("an episode is already active")
-        stage = self.pending / uuid.uuid4().hex
+        number = reserve_take_number(self.root)
+        take_dir = self.takes / str(number)
+        take_dir.mkdir()
+        atomic(take_dir / "recording.json", {"take_number": number, "state": "recording", "task": task})
+        stage = self.pending / str(number)
         stage.mkdir()
-        atomic(stage / "take.json", {"id": stage.name, "task": task, "created_at": time.time()})
-        self.active = {"stage": stage, "task": task, "processes": {}, "logs": {}, "frames": 0,
+        atomic(stage / "take.json", {"id": stage.name, "take_number": number, "task": task, "created_at": time.time()})
+        self.active = {"stage": stage, "take_number": number, "task": task, "processes": {}, "logs": {}, "frames": 0,
                        "image_hist": {key: np.zeros((3, 256), dtype=np.int64) for key in CAMERAS},
                        "sampled_images": 0, "first_ns": None, "last_ns": None, "max_gap_ms": 0.}
         try:
@@ -210,16 +243,19 @@ class DatasetWriter:
 
     def _close_encoders(self):
         take = self.active
-        take["journal"].flush()
-        os.fsync(take["journal"].fileno())
-        take["journal"].close()
+        if take.get("journal") is not None and not take["journal"].closed:
+            take["journal"].flush()
+            os.fsync(take["journal"].fileno())
+            take["journal"].close()
         for process in take["processes"].values():
-            process.stdin.close()
+            if not process.stdin.closed:
+                process.stdin.close()
         for key, process in take["processes"].items():
             if process.wait(timeout=15) != 0:
                 raise RuntimeError("MP4 encoding failed: " + key)
         for log in take["logs"].values():
-            log.close()
+            if not log.closed:
+                log.close()
 
     def finish(self):
         import pyarrow as pa
@@ -267,13 +303,13 @@ class DatasetWriter:
             value_feature = {"dtype": dtype, "_type": "Value"}
             hf_features[key] = value_feature if scalar else {
                 "feature": value_feature, "length": self.schema[key]["shape"][0], "_type": "Sequence"}
-            columns[key] = pa.array(value.tolist(), type=pa.from_numpy_dtype(dtype) if scalar else
-                                    pa.list_(pa.from_numpy_dtype(dtype), self.schema[key]["shape"][0]))
+            columns[key] = pa.array(value.tolist(), type=arrow_type(dtype) if scalar else
+                                    pa.list_(arrow_type(dtype), self.schema[key]["shape"][0]))
         table = pa.table(columns).replace_schema_metadata({b"huggingface": json.dumps({
             "info": {"features": hf_features}}).encode()})
         parquet = take["stage"] / "episode.parquet"
         pq.write_table(table, parquet, compression="snappy")
-        if not pq.read_table(parquet).equals(table):
+        if not pq.ParquetFile(parquet).read().equals(table):
             raise ValueError("Parquet read-back differs from captured data")
         for key, histogram in take["image_hist"].items():
             values = np.arange(256, dtype=np.float64) / 255.
@@ -291,7 +327,8 @@ class DatasetWriter:
         for key in CAMERAS:
             files.append({"source": key + ".mp4", "target": VIDEO_PATH.format(video_key="observation.images." + key, **layout),
                           "sha256": sha256(take["stage"] / (key + ".mp4"))})
-        record = {"episode_index": self.episodes, "attempt_id": take["stage"].name, "task": take["task"],
+        record = {"episode_index": self.episodes, "attempt_id": take["stage"].name,
+                  "take_number": take["take_number"], "task": take["task"],
                   "frames": n, "effective_fps": effective_fps, "max_frame_gap_ms": take["max_gap_ms"],
                   "config": self.config, "stats": stats, "files": files, "saved_at": time.time(),
                   "warning": "" if 28 <= effective_fps <= 32 else "Frame rate differs noticeably from nominal 30 Hz",
@@ -331,9 +368,39 @@ class DatasetWriter:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 os.replace(str(source), str(destination))
         atomic(ledger, record)
+        if record.get("take_number") is not None:
+            number = record["take_number"]
+            if type(number) is not int or number < 0:
+                raise ValueError("invalid human recording number")
+            directory = self.takes / str(number)
+            directory.mkdir(exist_ok=True)
+            marker = directory / "recording.json"
+            if marker.exists() and load(marker).get("take_number") != number:
+                raise ValueError("human recording folder belongs to a different take")
+            links = {}
+            for item in record["files"]:
+                name = "data.parquet" if item["source"] == "episode.parquet" else item["source"]
+                destination, source = directory / name, self.root / item["target"]
+                if destination.exists():
+                    if not os.path.samefile(str(source), str(destination)):
+                        raise FileExistsError("refusing to overwrite recording view: " + str(destination))
+                else:
+                    os.link(str(source), str(destination))
+                links[name] = item["target"]
+            atomic(marker, {"take_number": number, "state": "saved", "episode_index": index,
+                            "task": record["task"], "frames": record["frames"], "files": links})
         shutil.rmtree(stage)  # Exact owned pending take only; never a dataset or source directory.
 
-    def abort(self):
+    def mark_error(self, error):
+        if self.active is not None:
+            number = self.active["take_number"]
+            atomic(self.takes / str(number) / "recording.json", {
+                "take_number": number, "state": "error", "error": str(error),
+                "task": self.active["task"], "frames": self.active["frames"],
+                "pending": str(self.active["stage"]),
+            })
+
+    def _terminate_encoders(self):
         if self.active is None:
             return
         take = self.active
@@ -350,16 +417,35 @@ class DatasetWriter:
         for stream in [take.get("journal"), *take["logs"].values()]:
             if stream and not stream.closed:
                 stream.close()
+
+    def abort(self):
+        if self.active is None:
+            return
+        self._terminate_encoders()
+        take = self.active
         stage = take["stage"]
         if (stage.resolve().parent != self.pending.resolve()
                 or load(stage / "take.json")["id"] != stage.name):
             raise ValueError("refusing to discard an unowned directory")
         if (stage / "commit.json").exists():
             raise RuntimeError("save transaction began; restart to recover it, do not discard")
+        number = take["take_number"]
+        atomic(self.takes / str(number) / "recording.json", {"take_number": number, "state": "discarded",
+               "task": take["task"], "frames": take["frames"]})
         shutil.rmtree(stage)
         self.active = None
 
     def close(self):
-        if self.active is not None:
-            self.abort()
-        self.file_lock.close()
+        try:
+            if self.active is not None:
+                # Preserve failed takes on shutdown; only an explicit discard removes them.
+                try:
+                    self._close_encoders()
+                except Exception:
+                    self._terminate_encoders()
+        finally:
+            self.file_lock.close()
+
+    def numbering(self):
+        return {"take_number": self.active["take_number"] if self.active is not None else None,
+                "next_take_number": next_take_number(self.root), "takes_dir": str(self.takes)}

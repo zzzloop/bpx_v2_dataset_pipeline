@@ -2,6 +2,7 @@
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import logging
 from pathlib import Path
 import threading
 import time
@@ -71,14 +72,41 @@ class Recorder:
 
     def _discard(self):
         try:
+            number = self.writer.active["take_number"] if self.writer.active is not None else None
             self.writer.abort()
             with self.lock:
                 self.state, self.error = "idle", ""
-                self.last = {"discarded": True, "frames": self.frames,
+                self.last = {"discarded": True, "take_number": number, "frames": self.frames,
                              "message": "本条未保存的临时数据已删除，已保存的 episode 不受影响"}
         except Exception as error:
             with self.lock:
                 self.state, self.error = "error", str(error)
+
+    def retry(self):
+        with self.lock:
+            if self.state != "error" or (self.worker is not None and self.worker.is_alive()):
+                raise ValueError("仅可在异常录制已停止后重试保存")
+            if self.writer.active is None:
+                raise ValueError("没有可重试的缓存数据")
+            if (self.writer.active["stage"] / "commit.json").exists():
+                raise ValueError("保存事务已生成，请重启采集程序自动恢复；不要丢弃该目录")
+            self.state, self.error = "saving", ""
+            self.worker = threading.Thread(target=self._retry_save, name="ros1-save-retry", daemon=False)
+            self.worker.start()
+
+    def _retry_save(self):
+        try:
+            result = self.writer.finish()
+            with self.lock:
+                self.last, self.state = result, "idle"
+        except Exception as error:
+            logging.exception("ROS1 recording save retry failed")
+            with self.lock:
+                self.error, self.state = str(error), "error"
+            try:
+                self.writer.mark_error(error)
+            except Exception:
+                logging.exception("Could not persist the recording error marker")
 
     def _record(self):
         deadline, last_good = time.monotonic(), time.monotonic()
@@ -111,6 +139,7 @@ class Recorder:
         except Exception as error:
             # Keep incomplete files inspectable, never publish bad data as a training episode.
             self.stop_event.set()
+            logging.exception("ROS1 recording/capture finalization failed; pending data retained")
             with self.lock:
                 self.error, self.state = str(error), "error"
             if self.writer.active is not None:
@@ -119,6 +148,7 @@ class Recorder:
                 except Exception:
                     # The UI offers bounded termination/discard, without touching hardware.
                     pass
+                self.writer.mark_error(error)
 
     def status(self):
         with self.lock:
@@ -129,7 +159,7 @@ class Recorder:
                     "elapsed_sec": time.monotonic() - self.started if self.state == "recording" else 0,
                     "effective_fps": actual, "target_fps": 30, "resolution": "640×360",
                     "health": self.source.health(), "output_dir": str(self.writer.root),
-                    "saved_episodes": self.writer.episodes, "last": self.last}
+                    "saved_episodes": self.writer.episodes, "last": self.last, **self.writer.numbering()}
 
     def close(self):
         if self.state == "recording":
@@ -188,6 +218,8 @@ def handler(recorder):
                     recorder.stop()
                 elif self.path == "/api/discard":
                     recorder.stop(discard=True)
+                elif self.path == "/api/retry":
+                    recorder.retry()
                 else:
                     return self.reply(404, {"error": "not found"})
                 self.reply(202, recorder.status())

@@ -13,8 +13,8 @@ cd /home/nvidia/ROS
 git clone https://github.com/zzzloop/bpx_v2_dataset_pipeline.git
 cd bpx_v2_dataset_pipeline
 
-# 首次缺少这两个系统组件时安装一次，不需要则跳过
-sudo apt-get install python3-venv ffmpeg
+# 首次缺少 venv 时安装一次
+sudo apt-get install python3-venv
 
 bash scripts/install_ros1_collector_once.sh
 ```
@@ -23,6 +23,17 @@ bash scripts/install_ros1_collector_once.sh
 安装只创建本项目 `.venv-ros1`，不修改 ROS/系统 Python，不碰二代 `.venv`，也不安装 OpenPI、torch 或 JAX。
 使用 ROS1 对应的 `/usr/bin/python3`（一代目前 Python 3.8）；不在一代上执行二代的 `uv sync`。
 NumPy/Arrow 用预编译 wheel；没有匹配 wheel 时明确失败，不偷偷开始长时间源码编译。
+
+已有 Ubuntu FFmpeg 4.2.7、ffprobe 和 libx264 即满足需求，不要为了本采集器升级系统FFmpeg。
+Jetson NVIDIA源可能与Ubuntu的libpostproc-dev冲突。只有确实缺少FFmpeg时，才由硬件环境维护者选择兼容安装方式。
+NumPy 固定1.23.5以兼容Noetic继承的旧依赖；1.24删除np.bool后，旧依赖可能在写Parquet时才报错。
+旧安装更新一次项目虚拟环境即可，不改系统NumPy、不安装ONNX：
+
+```bash
+.venv-ros1/bin/python -m pip install --only-binary=:all: -r ros1_collector/requirements.txt
+```
+
+新版启动时先实际做一次微小Parquet写入/读回自检，失败会在开始录制前明确报错，避免录完才发现依赖不兼容。
 
 为避免旧 Python 无法安装当前 LeRobot SDK，写入器直接遵循 OpenPI 锁定的
 [LeRobot v2.1 格式源码](https://github.com/huggingface/lerobot/tree/0cf864870cf29f4738d3ade893e6fd13fbd7cdb5/lerobot/common/datasets)。
@@ -54,9 +65,16 @@ ssh -N -L 18766:127.0.0.1:8766 nvidia@工控机IP
 3. 点“停止并保存”：立即停止取样，在后台关闭 MP4、检查帧数、写 Parquet 和元数据。
 4. 等待回到“空闲”，再录下一条。失败示教点“丢弃本条”，只删除这一条未保存的临时数据。
 
-不需要每次新建目录。成功保存的 episode 连续编号，绝不覆盖旧 episode。每次尝试另有 UUID，失败重录不会覆盖原尝试。
+不需要每次新建目录。**人工查看的录制编号从0递增，目录为 `takes/0、takes/1、takes/2…`。**
+启动和新开一条录制时扫描已有数字目录/历史记录，取最大编号+1；中间缺号不补，失败或丢弃后也不复用编号。
+例如已有0、2，下条为3。另保存高水位计数，避免把曾经分配过但后来删掉的编号再次使用。
+成功的数字目录内提供三路MP4与data.parquet的硬链接，不额外复制视频体积；丢弃的目录仅保留小的状态记录。
+**LeRobot内部的成功episode_index仍连续编号**，它和录制编号不是同一个字段，避免失败空号破坏训练读取。
+旧UUID目录不会被自动重命名、删除或冒充成功；它们留在原处供核对。
 保存失败的条目不进入正式元数据；部分写入发生中断时，已校验完成的事务在下次启动恢复。
 没有完成校验的中断文件留在数据集 `.bpx_pending`，不会当作训练数据读取。
+保存异常不再一律显示“检查话题”；页面和终端会显示实际原因。当前进程里的缓存可点“重试保存本条”，不重新取样、不移动机器人。
+新版异常退出时保留失败缓存；只有明确点击“丢弃本条”才删除该条临时内容。
 同一数据集有排他锁，不能同时启动两份录制器。**不要一边向同一目录采集、一边训练；先停止采集并复制快照。**
 
 ## 4. 频率、图像与同步
@@ -108,6 +126,11 @@ action 保存绝对关节目标；需要的 delta 转换仍由训练 transforms 
   meta/episodes.jsonl
   meta/episodes_stats.jsonl
   meta/bpx_capture.jsonl          # 实际Hz、最大间隔、配置、尝试ID
+  takes/0/recording.json         # 人工录制编号0的保存/失败/丢弃状态
+  takes/0/left_eye.mp4           # 标准视频的硬链接
+  takes/0/left_wrist.mp4
+  takes/0/right_wrist.mp4
+  takes/0/data.parquet
   data/chunk-000/episode_000000.parquet
   videos/chunk-000/observation.images.left_eye/episode_000000.mp4
   videos/chunk-000/observation.images.left_wrist/episode_000000.mp4
@@ -135,3 +158,17 @@ cd ~/zzk_data/bpx_v2_dataset_pipeline
 
 本地遵照用户要求未运行测试、未安装环境、未连接机器人。回归规格在 `ros1_collector/test_contract.py`；
 可在服务器执行 `.venv/bin/python -m pytest /采集仓库/ros1_collector/test_contract.py -q`，先验证映射和同步逻辑，再做真机短录制。
+编号与保存依赖检查的补充回归规格在 `ros1_collector/test_numbering.py`，同样只在工控机/服务器环境运行。
+
+### 从旧版保存报错升级时
+
+旧版正在运行的进程不会自动加载新代码，而且旧版按Ctrl+C可能清理当前失败缓存。
+如果还需要保留截图中那条数据，**在另一个终端、且录制已处于异常停止状态时，先备份 `.bpx_pending`，再退出旧采集器**：
+
+```bash
+cd /home/nvidia/ROS/bpx_v2_dataset_pipeline
+cp -a recordings/lerobot/bpx_v1_humanoid_raw/.bpx_pending \
+  "recordings/ros1_pending_backup_$(date +%Y%m%d_%H%M%S)"
+```
+
+这是备份，不会把未经校验的失败条自动发布成训练数据。不要手工把它们移动到正式 videos/data 目录。
