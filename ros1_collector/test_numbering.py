@@ -1,7 +1,7 @@
 """Server-side regression specifications; no ROS or camera needed."""
 import json
 
-from ros1_collector.numbering import next_take_number, reserve_take_number
+from ros1_collector.numbering import inherit_take_numbers, next_take_number, reserve_take_number
 
 
 def test_empty_directory_starts_at_zero(tmp_path):
@@ -30,6 +30,19 @@ def test_existing_numeric_directories_and_old_episodes_are_respected(tmp_path):
 def test_counter_overrides_deleted_highest_directory(tmp_path):
     (tmp_path / ".bpx_next_take.json").write_text(json.dumps({"next": 25}))
     assert next_take_number(tmp_path) == 25
+
+
+def test_four_camera_numbering_continues_old_counter_without_editing_old_dataset(tmp_path):
+    old, new = tmp_path / "old", tmp_path / "new"
+    (old / "takes/0").mkdir(parents=True)
+    (old / "takes/2").mkdir()
+    new.mkdir()
+    before = sorted(str(path.relative_to(old)) for path in old.rglob("*"))
+    inherit_take_numbers(new, old)
+    assert reserve_take_number(new) == 3
+    inherit_take_numbers(new, old)
+    assert next_take_number(new) == 4
+    assert sorted(str(path.relative_to(old)) for path in old.rglob("*")) == before
 
 
 def test_startup_arrow_roundtrip_uses_real_save_dependencies():

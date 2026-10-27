@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from ros1_collector.contract import (
-    MOTOR_NAMES, canonical_command, command_to_action, decode_image, feedback_to_state, validate_config,
+    CAMERAS, STREAMS, MOTOR_NAMES, canonical_command, command_to_action, decode_image, feedback_to_state, validate_config,
 )
 from ros1_collector.source import Ros1Source
 from ros1_collector.writer import features
@@ -51,12 +51,19 @@ def test_source_never_reuses_camera_frames_or_substitutes_feedback_for_action():
     import time
     stamp = time.monotonic_ns()
     for key in source.buffers:
-        value = (np.zeros((360, 640, 3), dtype=np.uint8) if key in ("left_eye", "left_wrist", "right_wrist")
+        value = (np.zeros((360, 640, 3), dtype=np.uint8) if key in CAMERAS
                  else np.zeros(8 if key == "damiao" else 10 if key == "feetech" else 21))
         source.buffers[key].append((stamp - (1 if key in ("damiao", "feetech", "command") else 0), 0, 1, value))
     frame = source.sample()
     assert frame is not None and frame["action"].shape == (18,)
+    assert set(frame["images"]) == set(CAMERAS)
+    assert len(frame["bpx.receive_time_ns"]) == len(frame["bpx.source_time_ns"]) == len(STREAMS) == 7
     assert source.sample() is None
+    # Missing right-eye messages cannot be silently filled with the left eye.
+    right_eye = source.buffers["right_eye"].pop()
+    source.used.clear()
+    assert source.sample() is None
+    source.buffers["right_eye"].append(right_eye)
     source.buffers["command"].clear()
     source.used.clear()
     assert source.sample() is None
@@ -68,4 +75,6 @@ def test_video_features_keep_first_generation_training_contract():
     assert schema["action"]["names"][7] == "LeftGripper_1DoF"
     assert schema["action"]["names"][15] == "RightGripper_1DoF"
     cameras = [ft for ft in schema.values() if ft["dtype"] == "video"]
-    assert len(cameras) == 3 and all(ft["shape"] == [360, 640, 3] for ft in cameras)
+    assert len(cameras) == 4 and all(ft["shape"] == [360, 640, 3] for ft in cameras)
+    assert schema["bpx.receive_time_ns"]["names"] == list(STREAMS)
+    assert schema["bpx.receive_time_ns"]["shape"] == [7]

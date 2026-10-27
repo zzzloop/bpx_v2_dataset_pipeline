@@ -245,15 +245,20 @@ def main():
     output = args.output_dir or Path(config["output_dir"])
     if not output.is_absolute():
         output = PROJECT / output
+    numbering_source = None
+    if args.output_dir is None and config.get("numbering_source_dir"):
+        numbering_source = Path(config["numbering_source_dir"])
+        if not numbering_source.is_absolute():
+            numbering_source = PROJECT / numbering_source
     source = Ros1Source(config)
-    writer = DatasetWriter(output, config)
+    writer = DatasetWriter(output, config, numbering_source=numbering_source)
     recorder = Recorder(source, writer, config)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler(recorder))
     server.daemon_threads = True
     try:
         source.start()
         print("ROS1 LeRobot collector: http://127.0.0.1:%d" % args.port, flush=True)
-        print("Output: %s | 3 cameras, 640x360, target 30 Hz | NO hardware publishers" % output, flush=True)
+        print("Output: %s | 4 cameras, 640x360, target 30 Hz | NO hardware publishers" % output, flush=True)
         server.serve_forever(poll_interval=.2)
     except KeyboardInterrupt:
         pass

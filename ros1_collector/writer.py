@@ -16,7 +16,7 @@ import time
 import numpy as np
 
 from ros1_collector.contract import CAMERAS, JOINT_NAMES, MOTOR_NAMES, STREAMS
-from ros1_collector.numbering import next_take_number, reserve_take_number
+from ros1_collector.numbering import inherit_take_numbers, next_take_number, reserve_take_number
 
 DATA_PATH = "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet"
 VIDEO_PATH = "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4"
@@ -97,7 +97,7 @@ def features():
 
 
 class DatasetWriter:
-    def __init__(self, root, config):
+    def __init__(self, root, config, *, numbering_source=None):
         import fcntl
         # Fail before recording, never download dependencies at runtime.
         check_save_dependencies()
@@ -119,9 +119,9 @@ class DatasetWriter:
         except OSError as error:
             self.file_lock.close()
             raise RuntimeError("another recorder owns this dataset") from error
-        identity = {"schema": "bpx-v1-ros1-effective18-video-v1", "features": self.schema, "fps": 30}
+        identity = {"schema": "bpx-v1-ros1-effective18-video-4cam-v1", "features": self.schema, "fps": 30}
         if owner.exists() and load(owner) != identity:
-            raise ValueError("existing recorder dataset contract differs")
+            raise ValueError("数据集格式不同，不能把四路数据追加进三路目录；请使用新的 *_4cam 输出目录，旧数据不要删除")
         atomic(owner, identity)
         self.pending = self.root / ".bpx_pending"
         self.commits = self.root / ".bpx_commits"
@@ -129,6 +129,8 @@ class DatasetWriter:
         self.pending.mkdir(exist_ok=True)
         self.commits.mkdir(exist_ok=True)
         self.takes.mkdir(exist_ok=True)
+        if numbering_source is not None:
+            inherit_take_numbers(self.root, numbering_source)
         self.active = None
         # A completed transaction can be recovered; incomplete takes remain inspectable.
         for descriptor in sorted(self.pending.glob("*/commit.json"), key=lambda path: load(path)["episode_index"]):

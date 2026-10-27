@@ -21,10 +21,15 @@ def validate(root):
     for key in ("observation.state", "action"):
         assert info["features"][key]["shape"] == [18]
         assert info["features"][key]["names"] == JOINT_NAMES
-    for camera in CAMERAS:
+    # Keep the server validator useful for both historical 3-camera and new 4-camera data.
+    cameras = [camera for camera in CAMERAS if "observation.images." + camera in info["features"]]
+    assert set(CAMERAS[:3]).issubset(cameras)
+    assert info["total_videos"] == info["total_episodes"] * len(cameras)
+    for camera in cameras:
         feature = info["features"]["observation.images." + camera]
         assert feature["dtype"] == "video" and feature["shape"] == [360, 640, 3]
-    dataset = LeRobotDataset("bpx/bpx_v1_humanoid_raw", root=root, download_videos=False)
+    repo_id = "bpx/bpx_v1_humanoid_raw_4cam" if "right_eye" in cameras else "bpx/bpx_v1_humanoid_raw"
+    dataset = LeRobotDataset(repo_id, root=root, download_videos=False)
     rows = [json.loads(line) for line in (root / "meta/episodes.jsonl").read_text().splitlines()]
     captures = [json.loads(line) for line in (root / "meta/bpx_capture.jsonl").read_text().splitlines()]
     offset, sampled = 0, 0
@@ -47,7 +52,7 @@ def validate(root):
         assert capture["config"]["minimum_effective_fps"] <= capture["effective_fps"] <= capture["config"]["maximum_effective_fps"]
         for frame in sorted({0, length // 2, length - 1}):
             item = dataset[offset + frame]  # Actual LeRobot video decoding, not just our own metadata reader.
-            for camera in CAMERAS:
+            for camera in cameras:
                 image = item["observation.images." + camera]
                 assert tuple(image.shape) == (3, 360, 640) and bool(image.isfinite().all())
             for key in ("observation.state", "action"):

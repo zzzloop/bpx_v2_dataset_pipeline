@@ -2,7 +2,8 @@
   "fps": 30,
   "width": 640,
   "height": 360,
-  "output_dir": "recordings/lerobot/bpx_v1_humanoid_raw",
+  "output_dir": "recordings/lerobot/bpx_v1_humanoid_raw_4cam",
+  "numbering_source_dir": "recordings/lerobot/bpx_v1_humanoid_raw",
   "image_skew_ms": 40,
   "joint_max_age_ms": 150,
   "max_frame_gap_ms": 100,
@@ -10,6 +11,7 @@
   "maximum_effective_fps": 33,
   "topics": {
     "left_eye": "/data/left_eye_image",
+    "right_eye": "/data/right_eye_image",
     "left_wrist": "/data/left_wrist_image",
     "right_wrist": "/data/right_wrist_image",
     "damiao": "/feedback_damiao_joint_states",

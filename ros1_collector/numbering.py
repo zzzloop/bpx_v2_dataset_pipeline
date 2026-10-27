@@ -39,3 +39,18 @@ def reserve_take_number(root):
         os.fsync(stream.fileno())
     os.replace(str(temporary), str(counter))
     return number
+
+
+def inherit_take_numbers(root, source):
+    """Called under the NEW dataset lock. The old dataset is strictly read-only."""
+    root, source = Path(root), Path(source)
+    if not source.is_dir():
+        return
+    value = max(next_take_number(root), next_take_number(source))
+    counter = root / ".bpx_next_take.json"
+    temporary = counter.with_name(counter.name + ".tmp")
+    with temporary.open("w", encoding="utf-8") as stream:
+        json.dump({"next": value, "inherited_from": str(source.resolve())}, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(str(temporary), str(counter))

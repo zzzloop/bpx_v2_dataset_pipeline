@@ -7,7 +7,7 @@ import math
 
 import numpy as np
 
-CAMERAS = ("left_eye", "left_wrist", "right_wrist")
+CAMERAS = ("left_eye", "left_wrist", "right_wrist", "right_eye")
 STREAMS = CAMERAS + ("damiao", "feetech", "command")
 MOTOR_NAMES = tuple(
     ["eyou_motor%d" % i for i in range(1, 4)]

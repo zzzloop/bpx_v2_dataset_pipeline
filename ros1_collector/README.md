@@ -3,6 +3,9 @@
 这是**一代 ROS Noetic 的独立入口**，不使用项目原有 ROS2 页面，不导入 ROS2、不改变原来的推理控制台。
 只保留：任务指令、开始录制、停止并保存、丢弃本条。无翻译、训练控制或电机控制功能。
 
+当前一代采集为**四路：左眼、右眼、左腕、右腕，均为640×360、目标30Hz**。
+采集保留所有相机；训练使用哪些相机由训练配置选择。原来一代模型的三路输入和18维动作映射不因本次改动改变。
+
 ## 1. 工控机下载与首次安装
 
 硬件同学仍按原方式启动 ROS master、相机、关节反馈和遥操程序；本程序只订阅，绝不发布指令。
@@ -68,7 +71,7 @@ ssh -N -L 18766:127.0.0.1:8766 nvidia@工控机IP
 不需要每次新建目录。**人工查看的录制编号从0递增，目录为 `takes/0、takes/1、takes/2…`。**
 启动和新开一条录制时扫描已有数字目录/历史记录，取最大编号+1；中间缺号不补，失败或丢弃后也不复用编号。
 例如已有0、2，下条为3。另保存高水位计数，避免把曾经分配过但后来删掉的编号再次使用。
-成功的数字目录内提供三路MP4与data.parquet的硬链接，不额外复制视频体积；丢弃的目录仅保留小的状态记录。
+成功的数字目录内提供四路MP4与data.parquet的硬链接，不额外复制视频体积；丢弃的目录仅保留小的状态记录。
 **LeRobot内部的成功episode_index仍连续编号**，它和录制编号不是同一个字段，避免失败空号破坏训练读取。
 旧UUID目录不会被自动重命名、删除或冒充成功；它们留在原处供核对。
 保存失败的条目不进入正式元数据；部分写入发生中断时，已校验完成的事务在下次启动恢复。
@@ -79,8 +82,9 @@ ssh -N -L 18766:127.0.0.1:8766 nvidia@工控机IP
 
 ## 4. 频率、图像与同步
 
-- **目标 30Hz，三路 RGB 图像 640×360，不裁剪、不拉伸、不缩放。** 自动识别 rgb8/bgr8，并处理行填充。
-- 三路相机每条消息最多使用一次；以左眼为锚，在接收时钟上匹配腕部相机（默认最大偏差40ms）。
+- **目标 30Hz，四路 RGB 图像 640×360，不裁剪、不拉伸、不缩放。** 自动识别 rgb8/bgr8，并处理行填充。
+- 四路相机每条消息最多使用一次；以左眼为锚，在接收时钟上匹配右眼和两路腕部相机（默认最大偏差40ms）。
+- 右眼话题 `/data/right_eye_image` 也必须有消息；缺失时页面显示right_eye未就绪，不会拿左眼或旧帧冒充。
 - 状态与动作采用锚点之前最新的有效消息，默认最多150ms，不用未来值，不以反馈冒充 action。
 - 常规视频与 LeRobot timestamp 为 `frame_index/30`，便于现有训练按30Hz读取；**实际取样时间另行逐帧保留**。
 - 不复制旧图像伪造30Hz。页面显示真实有效采样率，保存报告保留真实时间间隔；默认允许27–33Hz这一近30Hz范围，低于28/高于32会额外提示。
@@ -97,6 +101,7 @@ ssh -N -L 18766:127.0.0.1:8766 nvidia@工控机IP
 | 输入 | 消息类型 | 长度/含义 |
 |---|---|---|
 | `/data/left_eye_image` | sensor_msgs/Image | 640×360，rgb8或bgr8 |
+| `/data/right_eye_image` | sensor_msgs/Image | 同上 |
 | `/data/left_wrist_image` | sensor_msgs/Image | 同上 |
 | `/data/right_wrist_image` | sensor_msgs/Image | 同上 |
 | `/feedback_damiao_joint_states` | sensor_msgs/JointState | position固定8维 |
@@ -120,7 +125,7 @@ action 保存绝对关节目标；需要的 delta 转换仍由训练 transforms 
 默认保存位置：
 
 ```text
-/home/nvidia/ROS/bpx_v2_dataset_pipeline/recordings/lerobot/bpx_v1_humanoid_raw/
+/home/nvidia/ROS/bpx_v2_dataset_pipeline/recordings/lerobot/bpx_v1_humanoid_raw_4cam/
   meta/info.json                 # codebase_version=v2.1，fps=30
   meta/tasks.jsonl               # 任务文本与task_index
   meta/episodes.jsonl
@@ -128,32 +133,39 @@ action 保存绝对关节目标；需要的 delta 转换仍由训练 transforms 
   meta/bpx_capture.jsonl          # 实际Hz、最大间隔、配置、尝试ID
   takes/0/recording.json         # 人工录制编号0的保存/失败/丢弃状态
   takes/0/left_eye.mp4           # 标准视频的硬链接
+  takes/0/right_eye.mp4
   takes/0/left_wrist.mp4
   takes/0/right_wrist.mp4
   takes/0/data.parquet
   data/chunk-000/episode_000000.parquet
   videos/chunk-000/observation.images.left_eye/episode_000000.mp4
+  videos/chunk-000/observation.images.right_eye/episode_000000.mp4
   videos/chunk-000/observation.images.left_wrist/episode_000000.mp4
   videos/chunk-000/observation.images.right_wrist/episode_000000.mp4
 ```
 
 可以用启动参数 `--output-dir /其他盘/新数据集目录` 修改输出；不允许往非本采集器创建的已有数据集硬追加。
+升级四路版时，默认新建 `_4cam` 数据集，不把四路数据硬追加进旧三路目录；旧目录和旧视频不改不删，也不伪造历史右眼。
+默认读取旧目录的最大录制编号作为起点，四路版继续递增；成功episode_index在新数据集中仍从0连续编号。
+配置的 `numbering_source_dir` 仅用于读取旧编号，不读取或转换旧图像。显式 `--output-dir` 选择其他目录时不自动继承默认旧目录的编号。
+时间诊断列随四路扩展为7维，顺序在meta/info.json的names中明确保存，不和旧三路的6维诊断列混写。
 无逐帧PNG缓存，不在Parquet内嵌图像。Parquet保存state/action、索引和诊断时间，视频独立保存。
 内置LeRobot图像统计是对每30个采集帧抽1帧做真实RGB统计，和官方v2.1采样统计同类；不改变保存的图像。
 **这些不是 OpenPI 的 norm_stats.json**，训练前仍需用训练集重新计算归一化。
 
-先录一条10秒左右的短样本，拷贝完整目录到服务器 `/scratch/bpx_datasets/lerobot/bpx/bpx_v1_humanoid_raw`。
+先录一条10秒左右的短样本，拷贝完整目录到服务器 `/scratch/bpx_datasets/lerobot/bpx/bpx_v1_humanoid_raw_4cam`。
 服务器拉取本仓库代码，然后借用原来 OpenPI 环境执行真正的LeRobot读取校验：
 
 ```bash
 cd ~/zzk_data/bpx_v2_dataset_pipeline
 ~/zzk_data/openpi-bpx-pi05-finetune/.venv/bin/python -m ros1_collector.validate \
-  /scratch/bpx_datasets/lerobot/bpx/bpx_v1_humanoid_raw
+  /scratch/bpx_datasets/lerobot/bpx/bpx_v1_humanoid_raw_4cam
 ```
 
 这里 `cd` 是为了读取**采集仓库的校验脚本**，并没有把训练项目搬到采集仓库。
 看到 `LEROBOT V2.1 READ/VIDEO PASS` 才确认服务器SDK实际能读取该批样本。校验每条Parquet与首/中/末视频帧，不是假装完成全帧内容审查。
-后续复用服务器仪表盘的审计和毛刺扫描；训练配置 repo_id 需要绑定 `bpx/bpx_v1_humanoid_raw`，再计算新归一化后训练。
+校验入口同时支持历史三路和新版四路的数据，不给旧三路数据补造右眼。
+后续复用服务器仪表盘的审计和毛刺扫描；训练配置 repo_id 需要绑定 `bpx/bpx_v1_humanoid_raw_4cam`，再计算新归一化后训练。
 数据结构兼容一代映射，不等于可以让旧配置继续读取另一个旧数据集却声称在训练新数据。
 
 本地遵照用户要求未运行测试、未安装环境、未连接机器人。回归规格在 `ros1_collector/test_contract.py`；
